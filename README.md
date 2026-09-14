@@ -48,7 +48,10 @@ uv sync
 
 ## Comandos
 
-Con `make` (recomendado — ver `make help`):
+**`ingest`/`transform`/`pdf-extract` son siempre manuales**, corridos por
+el admin en su máquina — la GitHub Action nunca los ejecuta (ver
+"Publicar hacia renovarte-catalogo" abajo). Con `make` (recomendado — ver
+`make help`):
 
 ```bash
 make check                              # lint + typecheck + test
@@ -59,11 +62,15 @@ make check                              # lint + typecheck + test
 make pdf-extract                        # PDF -> data/reference/laca_pdf_precios.csv (committed)
 
 make ingest                             # Etapa 1: descarga cruda de Serlaca
-make transform                          # Etapa 2: crudo + PDF + ofertas -> products.json
+make transform                          # Etapa 2: crudo + PDF + ofertas -> public/data/products.json
+
+# Revisar el diff, commitear y pushear public/data/products.json a este
+# repo — recién ahí la Action tiene algo nuevo para publicar:
+git add public/data/products.json && git commit -m "..." && git push
 
 # Publicar hacia renovarte-catalogo (Fase 3) — CATALOGO_CHECKOUT SIEMPRE un
 # clon descartable, nunca tu carpeta de trabajo real (publish le hace
-# reset --hard):
+# reset --hard). Podés correrlo local en vez de (o antes que) la Action:
 make publish CATALOGO_CHECKOUT=/tmp/catalogo-publish        # dry-run: prepara la rama, no pushea
 make publish-live CATALOGO_CHECKOUT=/tmp/catalogo-publish   # pushea y abre el PR de verdad
 ```
@@ -84,7 +91,7 @@ uv run mypy          # type check
 
 ```
 Makefile                       # atajos: make help
-.github/workflows/publish.yml  # cron + disparo manual: ingest -> transform -> publish
+.github/workflows/publish.yml  # cron + disparo manual: SOLO publish (ingest/transform son manuales)
 src/pipeline/
 ├── models.py      # Product (schema público, RFC-0001 §2.4) y CostRow (interno)
 ├── cli.py         # entry point: ingest / transform / publish / pdf-extract
@@ -97,6 +104,11 @@ src/pipeline/
 
 ## Publicar hacia renovarte-catalogo (Fase 3)
 
+`ingest`, `transform` y `pdf-extract` son **siempre manuales** — el admin
+los corre en su máquina, revisa el diff de `public/data/products.json`, y
+lo commitea/pushea a este repo. La GitHub Action **no** genera datos: solo
+toma ese `products.json` ya commiteado y lo publica.
+
 `renovarte-pipeline publish` nunca pushea a `main` de `renovarte-catalogo`:
 prepara una rama (`pipeline/auto-update-products`, se resetea desde `main`
 en cada corrida — no acumula commits viejos), corre el leak-check
@@ -104,16 +116,18 @@ en cada corrida — no acumula commits viejos), corre el leak-check
 push+abre PR. Sin `--live` (o sin `GITHUB_TOKEN`), queda en dry-run: prepara
 todo localmente y no toca GitHub.
 
-`.github/workflows/publish.yml` corre `ingest` → `transform` → `publish
---live` en un cron semanal + disparo manual. Para activarlo, cargar estos
-secrets en **Settings → Secrets and variables → Actions** de este repo en
-GitHub:
+`.github/workflows/publish.yml` corre solo `publish --live`, en un cron
+semanal (no-op si nadie commiteó un `products.json` nuevo) + disparo
+manual. Para activarlo, cargar este secret en **Settings → Secrets and
+variables → Actions** de este repo en GitHub:
 
 | Secret | Para qué |
 |---|---|
-| `SERLACA_API_KEY`, `SERLACA_LACA_ID` | Etapa 1 (`ingest`) |
-| `SERLACA_IMAGE_BASE`, `MARGIN_PERCENT_DEFAULT` | Etapa 2 (`transform`) |
-| `CATALOGO_PAT` | Etapa 3 (`publish`) — ver abajo |
+| `CATALOGO_PAT` | El único que necesita la Action — ver abajo |
+
+(`SERLACA_API_KEY` y el resto de la config de `ingest`/`transform` solo
+hacen falta en tu `.env.local`, nunca como secret de GitHub — esos pasos no
+corren en CI.)
 
 **`CATALOGO_PAT`**, paso a paso:
 1. GitHub → tu foto de perfil → **Settings** → **Developer settings** →
@@ -125,9 +139,10 @@ GitHub:
 4. Generar, copiar el token, y cargarlo como secret `CATALOGO_PAT` en
    `renovarte-pipeline` (nunca commitearlo, nunca pegarlo en un chat).
 
-El primer PR real (`make publish-live` o disparar la Action a mano desde
-GitHub) conviene correrlo vos mismo la primera vez, para ver el diff y
-confirmar que todo anda antes de dejarlo en piloto automático semanal.
+Flujo típico: `make ingest && make transform` (o `make pdf-extract` primero
+si cambió el PDF) → revisar el diff → commitear y pushear
+`public/data/products.json` → disparar la Action a mano desde GitHub (o
+esperar el cron semanal) → revisar y mergear el PR en `renovarte-catalogo`.
 
 ## Seguridad
 

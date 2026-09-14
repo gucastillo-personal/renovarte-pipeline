@@ -1,26 +1,34 @@
-# Fase 3 (PLAN.md): ingest -> transform -> publish, corriendo en CI en vez
-# de la máquina del admin. `publish` nunca pushea a main de
-# renovarte-catalogo — siempre abre (o actualiza) un PR; el merge es manual.
+# Fase 3 (PLAN.md): publish, corriendo en CI.
 #
-# Secrets a configurar en este repo (Settings > Secrets and variables >
-# Actions), nunca en el código:
-#   SERLACA_API_KEY, SERLACA_LACA_ID       — etapa 1 (ingest)
-#   SERLACA_IMAGE_BASE, MARGIN_PERCENT_*   — etapa 2 (transform)
-#   CATALOGO_PAT                            — fine-grained PAT, scoped SOLO a
-#     renovarte-catalogo, permisos Contents (read/write) + Pull requests
-#     (read/write). Nunca un PAT con acceso a toda la cuenta.
+# ingest / transform / pdf-extract son SIEMPRE manuales (`make ingest`,
+# `make transform`, `make pdf-extract`), en la máquina del admin — nunca
+# corren acá. Esta Action solo toma el `public/data/products.json` que el
+# admin ya generó y commiteó en este repo, y abre (o actualiza) el PR
+# contra renovarte-catalogo. `publish` nunca pushea a su `main` — el merge
+# del PR es siempre manual.
+#
+# Flujo: admin corre `make ingest && make transform` (y `make pdf-extract`
+# cuando cambia el PDF) localmente, revisa el diff de
+# public/data/products.json, lo commitea y pushea a renovarte-pipeline —
+# recién ahí esta Action tiene algo nuevo para publicar (manual o cron).
+#
+# Secret a configurar en este repo (Settings > Secrets and variables >
+# Actions):
+#   CATALOGO_PAT — fine-grained PAT, scoped SOLO a renovarte-catalogo,
+#     permisos Contents (read/write) + Pull requests (read/write). Nunca
+#     un PAT con acceso a toda la cuenta.
 name: Publicar catálogo
 
 on:
   schedule:
-    - cron: "0 9 * * 1" # lunes 09:00 UTC — ajustar al ritmo real de precios de LACA
+    - cron: "0 9 * * 1" # lunes 09:00 UTC — no-op si nadie commiteó un products.json nuevo
   workflow_dispatch: {}
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout renovarte-pipeline
+      - name: Checkout renovarte-pipeline (trae public/data/products.json ya generado)
         uses: actions/checkout@v4
 
       - name: Instalar uv
@@ -29,18 +37,6 @@ jobs:
       - name: Instalar dependencias
         run: uv sync --locked
 
-      - name: Etapa 1 — ingest (descarga cruda de Serlaca)
-        env:
-          SERLACA_API_KEY: ${{ secrets.SERLACA_API_KEY }}
-          SERLACA_LACA_ID: ${{ secrets.SERLACA_LACA_ID }}
-        run: uv run renovarte-pipeline ingest
-
-      - name: Etapa 2 — transform (crudo -> products.json)
-        env:
-          SERLACA_IMAGE_BASE: ${{ secrets.SERLACA_IMAGE_BASE }}
-          MARGIN_PERCENT_DEFAULT: ${{ secrets.MARGIN_PERCENT_DEFAULT }}
-        run: uv run renovarte-pipeline transform
-
       - name: Checkout dedicado de renovarte-catalogo
         uses: actions/checkout@v4
         with:
@@ -48,7 +44,7 @@ jobs:
           path: catalogo-checkout
           token: ${{ secrets.CATALOGO_PAT }}
 
-      - name: Etapa 3 — publish (leak-check + PR)
+      - name: publish (leak-check + PR)
         env:
           GITHUB_TOKEN: ${{ secrets.CATALOGO_PAT }}
         run: uv run renovarte-pipeline publish --catalogo catalogo-checkout --live
