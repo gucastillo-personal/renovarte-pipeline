@@ -2,6 +2,7 @@
 (un "origin" bare local + un clon) — sin red, sin tocar GitHub.
 """
 
+import base64
 import subprocess
 from pathlib import Path
 
@@ -153,6 +154,56 @@ def test_push_branch_reaches_origin(tmp_path: Path, origin_and_clone: tuple[Path
     # The bare origin IS the remote — its own branch list shows what got pushed.
     result = subprocess.run(["git", "branch"], cwd=origin, capture_output=True, text=True, check=True)
     assert "pipeline/auto-update-products" in result.stdout
+
+
+def test_push_branch_with_token_still_reaches_local_origin(
+    tmp_path: Path, origin_and_clone: tuple[Path, Path]
+) -> None:
+    """`http.extraheader` only matters for HTTP(S) remotes — passing a token
+    against this filesystem-path origin must be a harmless no-op, not break
+    the push.
+    """
+    origin, clone = origin_and_clone
+    new_products = tmp_path / "new_products.json"
+    new_products.write_text('[{"id": "1"}]\n', encoding="utf-8")
+    prepare_branch(
+        clone,
+        branch_name="pipeline/auto-update-products",
+        base_branch="main",
+        files_to_update={Path("public/data/products.json"): new_products},
+        commit_message="chore: update",
+    )
+
+    push_branch(clone, "pipeline/auto-update-products", token="fake-token")
+
+    result = subprocess.run(["git", "branch"], cwd=origin, capture_output=True, text=True, check=True)
+    assert "pipeline/auto-update-products" in result.stdout
+
+
+def test_push_branch_with_token_sets_basic_auth_extraheader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: a real GitHub Actions run failed with a 403 pushing to
+    renovarte-catalogo — push_branch relied entirely on whatever credential
+    a *previous, separate* `actions/checkout` step happened to leave
+    configured, which is fragile once a job checks out two repos with two
+    different tokens. The token must be applied explicitly, per push call.
+    """
+    captured: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("pipeline.publish.git_ops.subprocess.run", fake_run)
+
+    push_branch(Path("/fake/repo"), "pipeline/auto-update-products", token="my-token")
+
+    assert len(captured) == 1
+    args = captured[0]
+    assert args[0] == "git"
+    assert args[1] == "-c"
+    expected_b64 = base64.b64encode(b"x-access-token:my-token").decode()
+    assert args[2] == f"http.extraheader=AUTHORIZATION: basic {expected_b64}"
+    assert args[3:] == ["push", "origin", "pipeline/auto-update-products", "--force"]
 
 
 def test_git_error_message_includes_stderr(tmp_path: Path) -> None:

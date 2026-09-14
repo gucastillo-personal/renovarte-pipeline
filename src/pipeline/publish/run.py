@@ -69,7 +69,7 @@ def run_publish(
             ),
         )
 
-    push_branch(catalogo_path, branch_name)
+    push_branch(catalogo_path, branch_name, token=github_token)
     pr_url = open_pull_request(
         repo=repo,
         token=github_token,

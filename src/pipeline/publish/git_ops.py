@@ -8,6 +8,7 @@ Nunca apuntar `repo_path` al checkout de trabajo real de un humano: se
 perdería cualquier cambio local no commiteado ahí.
 """
 
+import base64
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,9 +76,21 @@ def prepare_branch(
     return PreparedBranch(branch=branch_name, has_changes=True, diff_summary=diff_summary)
 
 
-def push_branch(repo_path: Path, branch_name: str) -> None:
+def push_branch(repo_path: Path, branch_name: str, token: str | None = None) -> None:
     """Force-push de la rama del bot. Seguro acá porque `branch_name` es
     exclusivamente del pipeline (se resetea desde base en cada corrida) —
     nunca se usa sobre una rama de trabajo humana.
+
+    Con `token`, la autenticación va en un header `-c http.extraheader`
+    puntual para este comando — no depende de que un `actions/checkout`
+    anterior haya dejado la credencial "ambiente" bien configurada (frágil
+    cuando el job hace dos checkouts con tokens distintos: el del propio
+    repo del workflow y el de `renovarte-catalogo`). Sin `token`, pushea
+    con lo que ya haya configurado `origin` (uso local/manual).
     """
-    _run(["push", "origin", branch_name, "--force"], repo_path)
+    push_args = ["push", "origin", branch_name, "--force"]
+    if token:
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        _run(["-c", f"http.extraheader=AUTHORIZATION: basic {basic}", *push_args], repo_path)
+    else:
+        _run(push_args, repo_path)
