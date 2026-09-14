@@ -13,6 +13,8 @@ from collections.abc import Sequence
 
 from dotenv import dotenv_values
 
+from pipeline.pdf_cli import add_pdf_subcommands
+
 
 def _load_env() -> dict[str, str | None]:
     """`.env.local` wins over `.env`; both are optional. Mirrors
@@ -72,6 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "publish", help="Abre un PR a renovarte-catalogo con el products.json generado."
     ).set_defaults(func=cmd_publish)
+
+    add_pdf_subcommands(subparsers)
 
     return parser
 

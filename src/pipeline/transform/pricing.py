@@ -47,7 +47,12 @@ def compute_sale_price(costo: float, margin_percent: float) -> int:
     return _js_round(costo * (1 + margin_percent / 100))
 
 
-def build_public_product(row: CostRow, margin: float, descuento_pct: float | None = None) -> Product:
+def build_public_product(
+    row: CostRow,
+    margin: float,
+    descuento_pct: float | None = None,
+    precio_override: int | None = None,
+) -> Product:
     """Build one public product from a normalised `CostRow`.
 
     The cost (`precio_costo`) and the margin are consumed here and never
@@ -57,8 +62,13 @@ def build_public_product(row: CostRow, margin: float, descuento_pct: float | Non
     regular price is kept as `precio_regular` and `precio_venta` becomes the
     discounted price. `None`/0 -> no offer-pricing fields, `precio_venta` is
     the regular price (unchanged behaviour).
+
+    `precio_override` (spec 0008, from a saved PDF-price decision): when
+    given, replaces the costo+margen "regular" price outright — applied
+    *before* the offer discount, so a product that's both PDF-priced and on
+    offer gets the discount computed on the PDF price, not on costo+margen.
     """
-    regular = compute_sale_price(row.precio_costo, margin)
+    regular = precio_override if precio_override is not None else compute_sale_price(row.precio_costo, margin)
 
     if descuento_pct is not None and descuento_pct > 0:
         precio_venta = _js_round(regular * (1 - descuento_pct / 100))

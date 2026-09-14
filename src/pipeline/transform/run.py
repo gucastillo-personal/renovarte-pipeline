@@ -14,10 +14,12 @@ from pathlib import Path
 from pipeline.sources.serlaca_api import DEFAULT_IMAGE_BASE, raw_to_cost_rows
 from pipeline.transform.build_catalog import BuildCatalogResult, build_catalog, build_catalog_from_csv
 from pipeline.transform.offers import load_offers
+from pipeline.transform.pdf_decisions import load_decisions
 
 DEFAULT_IN_PATH = Path("data") / "input" / "serlaca-raw.json"
 DEFAULT_OFFERS_PATH = Path("data") / "offers.json"
 DEFAULT_OUT_PATH = Path("public") / "data" / "products.json"
+DEFAULT_PDF_DECISIONS_PATH = Path("data") / "reference" / "precio_pdf_decisiones.json"
 
 
 def run(
@@ -26,12 +28,14 @@ def run(
     out_path: str | Path = DEFAULT_OUT_PATH,
     offers_path: str | Path = DEFAULT_OFFERS_PATH,
     public_dir: str | Path = Path("public"),
+    pdf_decisions_path: str | Path = DEFAULT_PDF_DECISIONS_PATH,
 ) -> BuildCatalogResult:
     in_path = Path(in_path)
     offers = load_offers(offers_path)
+    pdf_decisions = load_decisions(pdf_decisions_path)
 
     if in_path.suffix == ".csv":
-        result = build_catalog_from_csv(in_path, out_path, env, public_dir, offers)
+        result = build_catalog_from_csv(in_path, out_path, env, public_dir, offers, pdf_decisions)
     else:
         try:
             dump = json.loads(in_path.read_text(encoding="utf-8"))
@@ -44,7 +48,7 @@ def run(
             raise ValueError(f"{in_path} no tiene un array `dataObjects`")
 
         mapped = raw_to_cost_rows(data_objects, image_base=env.get("SERLACA_IMAGE_BASE") or DEFAULT_IMAGE_BASE)
-        built = build_catalog(mapped.rows, env, out_path, offers)
+        built = build_catalog(mapped.rows, env, out_path, offers, pdf_decisions)
         result = BuildCatalogResult(products=built.products, warnings=[*mapped.warnings, *built.warnings])
 
     for warning in result.warnings:
