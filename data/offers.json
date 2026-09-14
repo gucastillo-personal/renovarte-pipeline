@@ -1,0 +1,6 @@
+{
+  "_comment": "Ofertas. Clave = productCode. {} = solo badge; { \"descuento_pct\": 10 } = 10% off precio_venta. Editá, corré `make transform`, revisá el diff, commiteá y pusheá.",
+  "codigos": {
+    "511950004": { "descuento_pct": 10 }
+  }
+}

@@ -1542,9 +1542,11 @@
     "nombre": "ACEITE ESENCIAL EUCALIPTO x 10ml",
     "presentacion": "10 ml",
     "descripcion": "Características: Aceite esencial puro para ser utilizado en tratamientos cosméticos, diluido en aceite vehicular ó en hidroterapia, aroma fresco y penetrante.\n\nBeneficios: El Eucaliptos tiene un aroma fresco y penetrante, que cuenta con diversas propiedades beneficiosas para el bienestar, que lo hacen ideal para respirar su agradable aroma.\n\nAplicación: Se puede utilizar puro o diluido de acuerdo a la intensidad deseada. En baños de inmersión 5 o 6 gotas.\n\nActivos principales: Aceite Esencial Eucalipto\n\nPresentación: Gotero",
-    "precio_venta": 27120,
+    "precio_venta": 24408,
+    "precio_regular": 27120,
+    "descuento_pct": 10,
     "imagen": "https://www.laboratoriolaca.com/files/Products/2024-09-16-T-11-50-14Eucalipto.png",
-    "en_oferta": false,
+    "en_oferta": true,
     "tags": []
   },
   {
