@@ -50,3 +50,22 @@ def write_reference_csv(rows: list[LacaPdfPublicRow], path: str | Path) -> None:
         writer.writeheader()
         for row in sorted_rows:
             writer.writerow(asdict(row))
+
+
+def load_pdf_prices(path: str | Path) -> dict[str, int]:
+    """`codigo -> precio ABC` from the committed public reference CSV — the
+    automatic, default source of `precio_venta` for `transform` (PDF is
+    primary; costo+margen is the fallback for anything not here or without
+    an ABC price). A missing file means no PDF has been extracted yet:
+    returns `{}`, so every product just falls back to costo+margen.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        return {}
+    prices: dict[str, int] = {}
+    with file_path.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            abc = (row.get("precio_abc") or "").strip()
+            if abc:
+                prices[row["codigo"]] = round(float(abc))
+    return prices

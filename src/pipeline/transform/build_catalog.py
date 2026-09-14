@@ -3,6 +3,14 @@
 configured margin per category. Source-agnostic (CSV or Serlaca API raw
 dump).
 
+Precio del PDF de LACA es la fuente primaria de `precio_venta` (por
+código, vía `pdf_prices`): cuando un producto matchea contra la referencia
+pública del PDF (`data/reference/laca_pdf_precios.csv`, cargada
+automáticamente por `transform`), ese precio ABC se usa directo, sin
+revisión manual. Sin match — o sin ABC en el PDF — el producto sigue con
+costo+margen, igual que siempre. El descuento de oferta (`data/offers.json`)
+se aplica después, sobre el precio ya resuelto sea cual sea su origen.
+
 Raises (writing nothing) on a bad margin env var, any row-level error, or
 output that fails the app's own `validate_products` contract. The internal
 margin report is spec 0007 and is not produced here.
@@ -16,7 +24,6 @@ from pipeline.models import CostRow, Product, validate_products
 from pipeline.sources.csv_source import read_csv_cost_rows
 from pipeline.transform.categories import clean_category
 from pipeline.transform.offers import Offer
-from pipeline.transform.pdf_decisions import PdfDecision
 from pipeline.transform.pricing import build_public_product, resolve_margin, to_products_json
 
 _NON_WORD_RE = re.compile(r"\s+")
@@ -33,13 +40,13 @@ def build_catalog(
     env: dict[str, str | None],
     out_path: str | Path,
     offers: dict[str, Offer] | None = None,
-    pdf_decisions: dict[str, PdfDecision] | None = None,
+    pdf_prices: dict[str, int] | None = None,
 ) -> BuildCatalogResult:
     if len(rows) == 0:
         raise ValueError("transform abortado: no hay productos para procesar")
 
     offers = offers or {}
-    pdf_decisions = pdf_decisions or {}
+    pdf_prices = pdf_prices or {}
 
     # Normalise category names (spec 0009 AC-5) and flag manual offers
     # (spec 0005) before anything groups or builds.
@@ -89,11 +96,10 @@ def build_catalog(
             offer = offers.get(row.codigo.strip())
             descuento_pct = offer.descuento_pct if offer is not None else None
 
-            # PDF price overlay (spec 0008 AC-5): applied before the offer
-            # discount, so a discounted product on a PDF price gets the
-            # discount computed on that price, not on costo+margen.
-            decision = pdf_decisions.get(row.codigo.strip())
-            precio_override = decision.valor if decision is not None and decision.fuente != "actual" else None
+            # PDF price (primary source, automatic): applied before the
+            # offer discount, so a discounted product on a PDF price gets
+            # the discount computed on that price, not on costo+margen.
+            precio_override = pdf_prices.get(row.codigo.strip())
 
             products.append(build_public_product(row, margin, descuento_pct, precio_override))
         except Exception as error:
@@ -119,9 +125,9 @@ def build_catalog_from_csv(
     env: dict[str, str | None],
     public_dir: str | Path,
     offers: dict[str, Offer] | None = None,
-    pdf_decisions: dict[str, PdfDecision] | None = None,
+    pdf_prices: dict[str, int] | None = None,
 ) -> BuildCatalogResult:
     """CSV-source convenience wrapper (spec 0002 fallback)."""
     rows, warnings = read_csv_cost_rows(csv_path, public_dir)
-    result = build_catalog(rows, env, out_path, offers, pdf_decisions)
+    result = build_catalog(rows, env, out_path, offers, pdf_prices)
     return BuildCatalogResult(products=result.products, warnings=[*warnings, *result.warnings])

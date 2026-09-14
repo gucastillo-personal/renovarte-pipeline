@@ -13,7 +13,7 @@ from collections.abc import Sequence
 
 from dotenv import dotenv_values
 
-from pipeline.pdf_cli import add_pdf_subcommands
+from pipeline.pdf_cli import add_pdf_extract_command
 
 
 def _load_env() -> dict[str, str | None]:
@@ -117,7 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     publish_parser.set_defaults(func=cmd_publish)
 
-    add_pdf_subcommands(subparsers)
+    add_pdf_extract_command(subparsers)
 
     return parser
 

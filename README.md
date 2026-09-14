@@ -12,20 +12,27 @@ Es un submodule de
 el plan completo de esta separación (arquitectura, mapeo de migración desde
 `renovarte-catalogo`, fases) está en `PLAN.md` de ese repo.
 
-**Estado:** Fase 0 (scaffold), Fase 1 (pricing/categorías/ofertas/CSV/API de
-Serlaca) y Fase 2 (precio desde el PDF de LACA, spec 0008) hechas. Fase 3
-(`publish` + GitHub Action) tiene el código completo y probado con git real
-+ API de GitHub mockeada — **falta cargar el secret `CATALOGO_PAT` en
-GitHub** y disparar el primer PR real (ver abajo). Fase 4 (dar de baja el
-código viejo en `renovarte-catalogo`) sigue pendiente. Ver `PLAN.md` en
-`renovarte-parent`.
+**Estado:** Fases 0-3 hechas y **en producción** — el primer PR automático
+real (`renovarte-catalogo#1`) se abrió y mergeó con éxito. Fase 4 (dar de
+baja el código viejo en `renovarte-catalogo`) sigue pendiente. Ver
+`PLAN.md` en `renovarte-parent`.
+
+**Precio del PDF de LACA — fuente primaria, automática.** `transform` carga
+`data/reference/laca_pdf_precios.csv` (generado por `pdf-extract`) y usa el
+precio ABC directo para todo código que matchea, **sin revisión manual por
+producto**. Sin match — o sin ABC en el PDF — el producto sigue con
+costo+margen, igual que siempre; nada desaparece del catálogo por no estar
+en el PDF de un mes dado. El descuento de `data/offers.json` se aplica
+después, sobre el precio ya resuelto. Ver
+[`docs/flujo-precio-pdf.md`](../docs/flujo-precio-pdf.md) en
+`renovarte-parent` para el diagrama completo.
 
 **Extracción del PDF — validada contra un PDF real de LACA** (lista de
-precios, 22 páginas, 230 productos extraídos). El parseo es por posición
-fija de columnas, no por encabezado (el PDF real no tiene fila de
-encabezado) — ver el docstring de `sources/pdf_laca.py` para el detalle de
-por qué. Tres páginas del PDF probado no reconstruyeron bien la grilla
-(`pdf extract`/`pdf review` avisan cuáles); si eso pasa con un PDF nuevo, es
+precios, 22 páginas, 230 productos extraídos, 220 con precio ABC). El
+parseo es por posición fija de columnas, no por encabezado (el PDF real no
+tiene fila de encabezado) — ver el docstring de `sources/pdf_laca.py` para
+el detalle de por qué. Tres páginas del PDF probado no reconstruyeron bien
+la grilla (`pdf-extract` avisa cuáles); si eso pasa con un PDF nuevo, es
 esperable — se reporta, no se pierde en silencio.
 
 ## Stack
@@ -45,16 +52,14 @@ Con `make` (recomendado — ver `make help`):
 
 ```bash
 make check                              # lint + typecheck + test
-make ingest                             # Etapa 1: descarga cruda de Serlaca
-make transform                          # Etapa 2: crudo -> products.json
 
-# Precio desde el PDF de LACA (spec 0008). PDF= y FUENTE= son opcionales si
-# hay un solo .pdf en data/raw/ — si hay más de uno, make corta y los lista.
-make pdf-extract                        # PDF -> crudo + data/reference/laca_pdf_precios.csv
-make pdf-review                         # match contra el catálogo + abre el reporte HTML
-make pdf-workflow                       # extract + review en un solo paso
-# elegir en el reporte, descargar precio_pdf_decisiones.json, y aplicarlo:
-make pdf-apply-decisions FILE=~/Downloads/precio_pdf_decisiones.json
+# Cuando baja un PDF nuevo de LACA (manual, ocasional). PDF= y FUENTE= son
+# opcionales si hay un solo .pdf en data/raw/ — si hay más de uno, make
+# corta y los lista.
+make pdf-extract                        # PDF -> data/reference/laca_pdf_precios.csv (committed)
+
+make ingest                             # Etapa 1: descarga cruda de Serlaca
+make transform                          # Etapa 2: crudo + PDF + ofertas -> products.json
 
 # Publicar hacia renovarte-catalogo (Fase 3) — CATALOGO_CHECKOUT SIEMPRE un
 # clon descartable, nunca tu carpeta de trabajo real (publish le hace
@@ -66,12 +71,9 @@ make publish-live CATALOGO_CHECKOUT=/tmp/catalogo-publish   # pushea y abre el P
 Equivalente sin `make`:
 
 ```bash
+uv run renovarte-pipeline pdf-extract --pdf data/raw/laca.pdf --fuente "LACA 2026-09"
 uv run renovarte-pipeline ingest
 uv run renovarte-pipeline transform
-uv run renovarte-pipeline pdf extract --pdf data/raw/laca.pdf --fuente "LACA 2026-09"
-uv run renovarte-pipeline pdf review --pdf data/raw/laca.pdf --fuente "LACA 2026-09" \
-  --catalog ../renovarte-catalogo/public/data/products.json
-uv run renovarte-pipeline pdf apply-decisions ~/Downloads/precio_pdf_decisiones.json
 
 uv run pytest        # tests
 uv run ruff check .  # lint
@@ -85,10 +87,10 @@ Makefile                       # atajos: make help
 .github/workflows/publish.yml  # cron + disparo manual: ingest -> transform -> publish
 src/pipeline/
 ├── models.py      # Product (schema público, RFC-0001 §2.4) y CostRow (interno)
-├── cli.py         # entry point: ingest / transform / publish / pdf
-├── pdf_cli.py     # subcomandos pdf: extract / review / apply-decisions
+├── cli.py         # entry point: ingest / transform / publish / pdf-extract
+├── pdf_cli.py     # comando pdf-extract
 ├── ingest/        # Etapa 1: descarga cruda por fuente
-├── transform/      # Etapa 2: margen, ofertas, PDF overlay, limpieza -> Product
+├── transform/      # Etapa 2: margen, ofertas, precio del PDF, limpieza -> Product
 ├── sources/       # adaptadores por fuente: Serlaca API, CSV, PDF de LACA
 └── publish/       # Fase 3: leak-check + rama/commit + PR contra renovarte-catalogo
 ```

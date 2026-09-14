@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pipeline.sources.pdf_laca import LacaPdfRow
-from pipeline.transform.pdf_reference import to_public_reference, write_reference_csv
+from pipeline.transform.pdf_reference import load_pdf_prices, to_public_reference, write_reference_csv
 
 
 def _row(**overrides: object) -> LacaPdfRow:
@@ -35,3 +35,18 @@ def test_write_reference_csv_sorted_by_codigo(tmp_path: Path) -> None:
     assert lines[1].startswith("001,")
     assert lines[2].startswith("002,")
     assert "precio_profesional" not in content
+
+
+def test_load_pdf_prices_missing_file_is_empty(tmp_path: Path) -> None:
+    assert load_pdf_prices(tmp_path / "nope.csv") == {}
+
+
+def test_load_pdf_prices_round_trip(tmp_path: Path) -> None:
+    rows = to_public_reference([_row(codigo="001"), _row(codigo="002", precio_abc=None)], fuente="LACA 2026-09")
+    out = tmp_path / "laca_pdf_precios.csv"
+    write_reference_csv(rows, out)
+
+    prices = load_pdf_prices(out)
+
+    assert prices == {"001": 22600}  # "002" has no ABC price — excluded, not zero
+
