@@ -6,10 +6,13 @@ dump).
 Precio del PDF de LACA es la fuente primaria de `precio_venta` (por
 código, vía `pdf_prices`): cuando un producto matchea contra la referencia
 pública del PDF (`data/reference/laca_pdf_precios.csv`, cargada
-automáticamente por `transform`), ese precio ABC se usa directo, sin
-revisión manual. Sin match — o sin ABC en el PDF — el producto sigue con
-costo+margen, igual que siempre. El descuento de oferta (`data/offers.json`)
-se aplica después, sobre el precio ya resuelto sea cual sea su origen.
+automáticamente por `transform`), `precio_venta = max(precio_abc, costo *
+(1 + margen))` — nunca el precio ABC a secas. Motivo: en ~1 de cada 3
+productos reales, el Precio ABC de LACA es igual a su Precio Profesional
+(el costo de RenovArte), así que usarlo sin este piso vendería a margen
+cero. Sin match — o sin ABC en el PDF — el producto sigue con costo+margen
+simple, igual que siempre. El descuento de oferta (`data/offers.json`) se
+aplica después, sobre el precio ya resuelto sea cual sea su origen.
 
 Raises (writing nothing) on a bad margin env var, any row-level error, or
 output that fails the app's own `validate_products` contract. The internal
@@ -96,12 +99,13 @@ def build_catalog(
             offer = offers.get(row.codigo.strip())
             descuento_pct = offer.descuento_pct if offer is not None else None
 
-            # PDF price (primary source, automatic): applied before the
-            # offer discount, so a discounted product on a PDF price gets
-            # the discount computed on that price, not on costo+margen.
-            precio_override = pdf_prices.get(row.codigo.strip())
+            # PDF price (primary source, automatic — floored at costo+margen
+            # inside build_public_product): applied before the offer
+            # discount, so a discounted product gets the discount computed
+            # on the resolved price, not on a plain costo+margen figure.
+            pdf_price = pdf_prices.get(row.codigo.strip())
 
-            products.append(build_public_product(row, margin, descuento_pct, precio_override))
+            products.append(build_public_product(row, margin, descuento_pct, pdf_price))
         except Exception as error:
             errors.append(f"item {index + 1}: {error}")
 

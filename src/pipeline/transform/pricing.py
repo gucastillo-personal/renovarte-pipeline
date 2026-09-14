@@ -51,7 +51,7 @@ def build_public_product(
     row: CostRow,
     margin: float,
     descuento_pct: float | None = None,
-    precio_override: int | None = None,
+    pdf_price: int | None = None,
 ) -> Product:
     """Build one public product from a normalised `CostRow`.
 
@@ -63,12 +63,18 @@ def build_public_product(
     discounted price. `None`/0 -> no offer-pricing fields, `precio_venta` is
     the regular price (unchanged behaviour).
 
-    `precio_override` (spec 0008, from a saved PDF-price decision): when
-    given, replaces the costo+margen "regular" price outright — applied
-    *before* the offer discount, so a product that's both PDF-priced and on
-    offer gets the discount computed on the PDF price, not on costo+margen.
+    `pdf_price` (spec 0008, LACA's ABC price for this código): the "regular"
+    price is `max(pdf_price, costo * (1 + margen))`, never just `pdf_price`
+    outright — for ~1 in 3 real products, LACA's ABC price equals their own
+    Precio Profesional (RenovArte's cost), so using it unconditionally would
+    sell at zero margin. The floor guarantees RenovArte's configured margin
+    always holds; LACA's price wins only when it's already at least as good.
+    Applied *before* the offer discount, so a product that's both PDF-priced
+    and on offer gets the discount computed on this resolved price, not on
+    a plain costo+margen figure.
     """
-    regular = precio_override if precio_override is not None else compute_sale_price(row.precio_costo, margin)
+    costo_mas_margen = compute_sale_price(row.precio_costo, margin)
+    regular = max(pdf_price, costo_mas_margen) if pdf_price is not None else costo_mas_margen
 
     if descuento_pct is not None and descuento_pct > 0:
         precio_venta = _js_round(regular * (1 - descuento_pct / 100))

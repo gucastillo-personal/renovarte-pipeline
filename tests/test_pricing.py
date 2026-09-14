@@ -83,6 +83,26 @@ def test_build_public_product_zero_discount_is_no_discount() -> None:
     assert product.precio_venta == 1200
 
 
+def test_build_public_product_pdf_price_above_floor_wins() -> None:
+    # costo=1000, margin=20 -> floor 1200; pdf_price 1300 is higher, wins.
+    product = build_public_product(_row(), margin=20, pdf_price=1300)
+    assert product.precio_venta == 1300
+
+
+def test_build_public_product_pdf_price_below_floor_is_ignored() -> None:
+    # Regression: ~1 in 3 real products have Precio ABC == Precio
+    # Profesional (LACA's cost to RenovArte) — using ABC outright would
+    # sell at zero margin. costo=1000, margin=20 -> floor 1200; pdf_price
+    # 1000 (e.g. ABC == costo) must never win over the floor.
+    product = build_public_product(_row(), margin=20, pdf_price=1000)
+    assert product.precio_venta == 1200
+
+
+def test_build_public_product_pdf_price_equal_to_floor() -> None:
+    product = build_public_product(_row(), margin=20, pdf_price=1200)
+    assert product.precio_venta == 1200
+
+
 def test_to_products_json_sorts_by_id_and_ends_with_newline() -> None:
     p1 = build_public_product(_row(codigo="002"), margin=20)
     p2 = build_public_product(_row(codigo="001"), margin=20)
