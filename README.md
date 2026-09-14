@@ -12,11 +12,13 @@ Es un submodule de
 el plan completo de esta separación (arquitectura, mapeo de migración desde
 `renovarte-catalogo`, fases) está en `PLAN.md` de ese repo.
 
-**Estado:** Fase 0 (scaffold) y Fase 1 (pricing/categorías/ofertas/CSV/API de
-Serlaca, con paridad byte a byte verificada contra el pipeline TS original) y
-Fase 2 (precio desde el PDF de LACA, spec 0008) hechas. Falta Fase 3
-(automatizar el handoff vía PR) y Fase 4 (dar de baja el código viejo en
-`renovarte-catalogo`). Ver `PLAN.md` en `renovarte-parent`.
+**Estado:** Fase 0 (scaffold), Fase 1 (pricing/categorías/ofertas/CSV/API de
+Serlaca) y Fase 2 (precio desde el PDF de LACA, spec 0008) hechas. Fase 3
+(`publish` + GitHub Action) tiene el código completo y probado con git real
++ API de GitHub mockeada — **falta cargar el secret `CATALOGO_PAT` en
+GitHub** y disparar el primer PR real (ver abajo). Fase 4 (dar de baja el
+código viejo en `renovarte-catalogo`) sigue pendiente. Ver `PLAN.md` en
+`renovarte-parent`.
 
 **Extracción del PDF — validada contra un PDF real de LACA** (lista de
 precios, 22 páginas, 230 productos extraídos). El parseo es por posición
@@ -53,6 +55,12 @@ make pdf-review                         # match contra el catálogo + abre el re
 make pdf-workflow                       # extract + review en un solo paso
 # elegir en el reporte, descargar precio_pdf_decisiones.json, y aplicarlo:
 make pdf-apply-decisions FILE=~/Downloads/precio_pdf_decisiones.json
+
+# Publicar hacia renovarte-catalogo (Fase 3) — CATALOGO_CHECKOUT SIEMPRE un
+# clon descartable, nunca tu carpeta de trabajo real (publish le hace
+# reset --hard):
+make publish CATALOGO_CHECKOUT=/tmp/catalogo-publish        # dry-run: prepara la rama, no pushea
+make publish-live CATALOGO_CHECKOUT=/tmp/catalogo-publish   # pushea y abre el PR de verdad
 ```
 
 Equivalente sin `make`:
@@ -73,15 +81,51 @@ uv run mypy          # type check
 ## Estructura
 
 ```
-Makefile         # atajos: make help
+Makefile                       # atajos: make help
+.github/workflows/publish.yml  # cron + disparo manual: ingest -> transform -> publish
 src/pipeline/
 ├── models.py      # Product (schema público, RFC-0001 §2.4) y CostRow (interno)
 ├── cli.py         # entry point: ingest / transform / publish / pdf
 ├── pdf_cli.py     # subcomandos pdf: extract / review / apply-decisions
 ├── ingest/        # Etapa 1: descarga cruda por fuente
 ├── transform/      # Etapa 2: margen, ofertas, PDF overlay, limpieza -> Product
-└── sources/       # adaptadores por fuente: Serlaca API, CSV, PDF de LACA
+├── sources/       # adaptadores por fuente: Serlaca API, CSV, PDF de LACA
+└── publish/       # Fase 3: leak-check + rama/commit + PR contra renovarte-catalogo
 ```
+
+## Publicar hacia renovarte-catalogo (Fase 3)
+
+`renovarte-pipeline publish` nunca pushea a `main` de `renovarte-catalogo`:
+prepara una rama (`pipeline/auto-update-products`, se resetea desde `main`
+en cada corrida — no acumula commits viejos), corre el leak-check
+(`pipeline/publish/leak_check.py`, espeja `check-leak.mjs`) y recién si pasa
+push+abre PR. Sin `--live` (o sin `GITHUB_TOKEN`), queda en dry-run: prepara
+todo localmente y no toca GitHub.
+
+`.github/workflows/publish.yml` corre `ingest` → `transform` → `publish
+--live` en un cron semanal + disparo manual. Para activarlo, cargar estos
+secrets en **Settings → Secrets and variables → Actions** de este repo en
+GitHub:
+
+| Secret | Para qué |
+|---|---|
+| `SERLACA_API_KEY`, `SERLACA_LACA_ID` | Etapa 1 (`ingest`) |
+| `SERLACA_IMAGE_BASE`, `MARGIN_PERCENT_DEFAULT` | Etapa 2 (`transform`) |
+| `CATALOGO_PAT` | Etapa 3 (`publish`) — ver abajo |
+
+**`CATALOGO_PAT`**, paso a paso:
+1. GitHub → tu foto de perfil → **Settings** → **Developer settings** →
+   **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+2. **Repository access**: "Only select repositories" → elegir únicamente
+   `renovarte-catalogo`. Nunca "All repositories".
+3. **Permissions** → Repository permissions: `Contents` = Read and write,
+   `Pull requests` = Read and write. Todo lo demás en "No access".
+4. Generar, copiar el token, y cargarlo como secret `CATALOGO_PAT` en
+   `renovarte-pipeline` (nunca commitearlo, nunca pegarlo en un chat).
+
+El primer PR real (`make publish-live` o disparar la Action a mano desde
+GitHub) conviene correrlo vos mismo la primera vez, para ver el diff y
+confirmar que todo anda antes de dejarlo en piloto automático semanal.
 
 ## Seguridad
 

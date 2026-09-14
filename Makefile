@@ -19,8 +19,8 @@ endif
 # "LACA Septiembre"). Sobreescribible: FUENTE="LACA Septiembre 2026".
 FUENTE ?= LACA $(basename $(notdir $(PDF)))
 
-.PHONY: help install test lint typecheck check ingest transform \
-        pdf-extract pdf-review pdf-workflow pdf-apply-decisions _require-pdf-args
+.PHONY: help install test lint typecheck check ingest transform publish publish-live \
+        pdf-extract pdf-review pdf-workflow pdf-apply-decisions _require-pdf-args _require-catalogo-checkout
 
 help:
 	@echo "renovarte-pipeline — targets disponibles:"
@@ -36,8 +36,13 @@ help:
 	@echo "  make pdf-workflow [PDF=...] [FUENTE=...] extract + review en un solo paso"
 	@echo "  make pdf-apply-decisions FILE=...        aplica el JSON descargado del reporte"
 	@echo ""
+	@echo "  make publish CATALOGO_CHECKOUT=<clon dedicado>       dry-run: prepara la rama, no pushea"
+	@echo "  make publish-live CATALOGO_CHECKOUT=<clon dedicado>  pushea y abre el PR de verdad"
+	@echo ""
 	@echo "  PDF y FUENTE son opcionales si hay un solo .pdf en $(RAW_DIR)/."
 	@echo "  CATALOG por defecto: $(CATALOG)"
+	@echo "  CATALOGO_CHECKOUT: SIEMPRE un clon descartable, NUNCA tu carpeta"
+	@echo "  de trabajo de renovarte-catalogo — publish le hace reset --hard."
 
 install:
 	uv sync
@@ -87,3 +92,17 @@ pdf-apply-decisions:
 		exit 1; \
 	fi
 	uv run renovarte-pipeline pdf apply-decisions "$(FILE)"
+
+_require-catalogo-checkout:
+	@if [ -z "$(CATALOGO_CHECKOUT)" ]; then \
+		echo '✗ Especificá CATALOGO_CHECKOUT=<clon dedicado de renovarte-catalogo>.'; \
+		echo '  Tiene que ser un clon DESCARTABLE (publish le hace reset --hard),'; \
+		echo '  nunca tu carpeta de trabajo real. Ej.: git clone <url> /tmp/catalogo-publish'; \
+		exit 1; \
+	fi
+
+publish: _require-catalogo-checkout
+	uv run renovarte-pipeline publish --catalogo "$(CATALOGO_CHECKOUT)"
+
+publish-live: _require-catalogo-checkout
+	uv run renovarte-pipeline publish --catalogo "$(CATALOGO_CHECKOUT)" --live

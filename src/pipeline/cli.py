@@ -48,9 +48,33 @@ def cmd_transform(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_publish(_args: argparse.Namespace) -> int:
-    print("publish: not implemented yet — see PLAN.md Fase 3", file=sys.stderr)
-    return 1
+def cmd_publish(args: argparse.Namespace) -> int:
+    from pipeline.publish.run import DEFAULT_BASE_BRANCH, DEFAULT_BRANCH, DEFAULT_REPO, run_publish
+    from pipeline.transform.run import DEFAULT_OUT_PATH
+
+    env = _load_env()
+    dry_run = not args.live
+    token = env.get("GITHUB_TOKEN") if not dry_run else None
+    if not dry_run and not token:
+        print("✗ --live requiere GITHUB_TOKEN en el entorno (.env/.env.local)", file=sys.stderr)
+        return 1
+
+    try:
+        result = run_publish(
+            products_json_path=args.products_json or DEFAULT_OUT_PATH,
+            catalogo_path=args.catalogo,
+            repo=args.repo or DEFAULT_REPO,
+            branch_name=args.branch or DEFAULT_BRANCH,
+            base_branch=args.base or DEFAULT_BASE_BRANCH,
+            github_token=token,
+            dry_run=dry_run,
+        )
+    except Exception as error:
+        print(f"✗ {error}", file=sys.stderr)
+        return 1
+
+    print(("✓ " if result.opened_pr_url or not result.has_changes else "") + result.message)
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,9 +95,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     transform_parser.set_defaults(func=cmd_transform)
 
-    subparsers.add_parser(
+    publish_parser = subparsers.add_parser(
         "publish", help="Abre un PR a renovarte-catalogo con el products.json generado."
-    ).set_defaults(func=cmd_publish)
+    )
+    publish_parser.add_argument(
+        "--catalogo", required=True, help="Checkout DEDICADO de renovarte-catalogo (nunca tu carpeta de trabajo)."
+    )
+    publish_parser.add_argument("--products-json", default=None, help="Default: public/data/products.json")
+    publish_parser.add_argument(
+        "--repo", default=None, help="owner/name. Default: gucastillo-personal/renovarte-catalogo"
+    )
+    publish_parser.add_argument("--branch", default=None)
+    publish_parser.add_argument("--base", default=None)
+    publish_parser.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "Sin esto: dry-run (prepara la rama, no pushea ni abre PR). "
+            "Con esto: pushea y abre el PR de verdad (requiere GITHUB_TOKEN)."
+        ),
+    )
+    publish_parser.set_defaults(func=cmd_publish)
 
     add_pdf_subcommands(subparsers)
 
