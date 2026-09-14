@@ -57,3 +57,8 @@ def test_render_review_html_lists_unmatched_both_directions() -> None:
     html = render_review_html(match, fuente="x")
     assert '"codigo": "002"' in html
     assert '"codigo": "003"' in html
+    # Unmatched PDF rows still carry their extracted prices (context only —
+    # no catalog product to apply a decision to), so it's clear extraction
+    # worked even when there's no match.
+    assert '"precioAbc": 2' in html
+    assert '"precioCatalogo": 3' in html

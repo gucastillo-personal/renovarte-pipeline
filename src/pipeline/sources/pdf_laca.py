@@ -24,6 +24,12 @@ RFC-0001 §4 en renovarte-catalogo):
 - Páginas sin ninguna fila que empiece con un código de 8-9 dígitos (ej. la
   tabla de rango de puntos, o páginas en blanco) no aportan filas — no
   hace falta detectarlas aparte.
+- **El código real siempre tiene 9 dígitos** (es el mismo `id` que usa
+  `products.json`) — el PDF a veces lo imprime como número, sin el cero a
+  la izquierda ("17060004" en vez de "017060004"). Se repone con
+  zero-padding al parsear; sin esto, ~30 productos no matcheaban contra el
+  catálogo por una diferencia puramente de formato de string, no porque
+  falten datos.
 """
 
 import re
@@ -37,6 +43,13 @@ from pipeline.sources.csv_source import parse_ars_number
 
 _CODE_START_RE = re.compile(r"^(\d{8,9})\b\s*(.*)$")
 _NOISE_LINE_RE = re.compile(r"^[A-Z]{0,3}\s*[\d.,]*$")
+
+
+def _normalize_codigo(codigo: str) -> str:
+    """Real codes are always 9 digits (same `id` as `products.json`); the
+    PDF sometimes prints one without its leading zero.
+    """
+    return codigo.zfill(9)
 
 
 @dataclass(frozen=True)
@@ -85,7 +98,7 @@ def _split_name_cell(cell_text: str) -> list[tuple[str, str]]:
         if match:
             if current_codigo is not None:
                 blocks.append((current_codigo, _join_name(name_lines)))
-            current_codigo = match.group(1)
+            current_codigo = _normalize_codigo(match.group(1))
             name_lines = [match.group(2)] if match.group(2) else []
         else:
             name_lines.append(line)

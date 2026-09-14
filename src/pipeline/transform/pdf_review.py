@@ -58,7 +58,19 @@ _TEMPLATE = """<!doctype html>
 <ul class="warn-list" id="list-sin-pdf"></ul>
 
 <h2>Filas del PDF sin match en el catálogo (<span id="count-sin-match"></span>)</h2>
-<ul class="warn-list" id="list-sin-match"></ul>
+<p class="meta">
+  Sin producto en el catálogo al que aplicarles una decisión — se muestran
+  los precios del PDF solo como referencia.
+</p>
+<table id="unmatched-table">
+  <thead>
+    <tr>
+      <th>Código</th><th>Nombre (PDF)</th>
+      <th>Precio Profesional (costo)</th><th>Precio ABC</th><th>Precio Catálogo</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
 
 <script id="review-data" type="application/json">__DATA_JSON__</script>
 <script>
@@ -115,9 +127,17 @@ document.getElementById("list-sin-pdf").innerHTML = data.catalogoSinPdf
   .join("");
 
 document.getElementById("count-sin-match").textContent = data.pdfSinMatch.length;
-document.getElementById("list-sin-match").innerHTML = data.pdfSinMatch
-  .map((p) => `<li>${esc(p.codigo)} — ${esc(p.nombrePdf)}</li>`)
-  .join("");
+const unmatchedBody = document.querySelector("#unmatched-table tbody");
+for (const row of data.pdfSinMatch) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${esc(row.codigo)}</td>
+    <td>${esc(row.nombrePdf)}</td>
+    <td>${fmt(row.precioProfesional)}</td>
+    <td>${fmt(row.precioAbc)}</td>
+    <td>${fmt(row.precioCatalogo)}</td>`;
+  unmatchedBody.appendChild(tr);
+}
 
 document.getElementById("download").addEventListener("click", () => {
   const decisions = {};
@@ -172,7 +192,16 @@ def render_review_html(
             for row in match.matched
         ],
         "catalogoSinPdf": [{"codigo": p.id, "nombre": p.nombre} for p in match.catalogo_sin_pdf],
-        "pdfSinMatch": [{"codigo": r.codigo, "nombrePdf": r.nombre_pdf} for r in match.pdf_sin_match],
+        "pdfSinMatch": [
+            {
+                "codigo": r.codigo,
+                "nombrePdf": r.nombre_pdf,
+                "precioProfesional": r.precio_profesional,
+                "precioAbc": r.precio_abc,
+                "precioCatalogo": r.precio_catalogo,
+            }
+            for r in match.pdf_sin_match
+        ],
     }
     # </script> can't appear literally inside a script body.
     data_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")

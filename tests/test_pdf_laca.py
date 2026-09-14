@@ -40,10 +40,11 @@ def test_split_name_cell_no_code_found_is_empty() -> None:
     assert _split_name_cell("") == []
 
 
-def test_split_name_cell_eight_digit_code() -> None:
-    # Not every product line uses 9-digit codes — nail polish etc. use 8.
+def test_split_name_cell_eight_digit_code_is_zero_padded() -> None:
+    # The PDF sometimes prints a code without its leading zero (nail polish
+    # etc.) — the real code (== products.json's id) is always 9 digits.
     blocks = _split_name_cell("18128604\n15\nEsmalte efecto gel | 86 Magic Night")
-    assert blocks == [("18128604", "Esmalte efecto gel | 86 Magic Night")]
+    assert blocks == [("018128604", "Esmalte efecto gel | 86 Magic Night")]
 
 
 def test_split_name_cell_short_name_that_looks_like_noise_is_not_dropped() -> None:
@@ -51,7 +52,12 @@ def test_split_name_cell_short_name_that_looks_like_noise_is_not_dropped() -> No
     # suffix like "L"/"CP" — both match the same noise-looking shape, so the
     # fallback (last non-empty line) has to win over dropping everything.
     blocks = _split_name_cell("17060004\n55\nF1")
-    assert blocks == [("17060004", "F1")]
+    assert blocks == [("017060004", "F1")]
+
+
+def test_split_name_cell_nine_digit_code_unaffected_by_padding() -> None:
+    blocks = _split_name_cell("510500003\n250\nProducto")
+    assert blocks == [("510500003", "Producto")]
 
 
 def test_parse_table_single_code_rows() -> None:
