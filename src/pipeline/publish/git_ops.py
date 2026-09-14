@@ -17,6 +17,14 @@ class GitError(RuntimeError):
     pass
 
 
+# A fresh `actions/checkout` in CI has no git identity configured at all —
+# `git commit` fails outright without one. Set it locally (never --global,
+# so it only affects this one checkout) rather than relying on the runner
+# or the caller's machine to already have one.
+BOT_NAME = "renovarte-pipeline"
+BOT_EMAIL = "renovarte-pipeline@users.noreply.github.com"
+
+
 def _run(args: list[str], cwd: Path) -> str:
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -45,6 +53,9 @@ def prepare_branch(
     La rama se resetea a `base_branch` en cada corrida — no acumula commits
     de corridas anteriores. Es la rama del bot: siempre parte limpia.
     """
+    _run(["config", "user.name", BOT_NAME], repo_path)
+    _run(["config", "user.email", BOT_EMAIL], repo_path)
+
     _run(["fetch", "origin", base_branch], repo_path)
     _run(["checkout", base_branch], repo_path)
     _run(["reset", "--hard", f"origin/{base_branch}"], repo_path)

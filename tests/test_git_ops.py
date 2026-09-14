@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline.publish.git_ops import GitError, prepare_branch, push_branch
+from pipeline.publish.git_ops import BOT_EMAIL, BOT_NAME, GitError, prepare_branch, push_branch
 
 
 def _git(args: list[str], cwd: Path) -> None:
@@ -35,8 +35,9 @@ def origin_and_clone(tmp_path: Path) -> tuple[Path, Path]:
 
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", str(origin), str(clone)], check=True, capture_output=True, text=True)
-    _git(["config", "user.email", "bot@example.com"], clone)
-    _git(["config", "user.name", "Bot"], clone)
+    # Deliberately no `git config user.name/email` here — a fresh
+    # `actions/checkout` in CI has none either. prepare_branch must set its
+    # own local identity, not rely on one already being there.
     return origin, clone
 
 
@@ -58,6 +59,40 @@ def test_prepare_branch_commits_when_content_changes(tmp_path: Path, origin_and_
     assert "products.json" in result.diff_summary
     committed = (clone / "public" / "data" / "products.json").read_text(encoding="utf-8")
     assert committed == '[{"id": "1"}]\n'
+
+
+def test_prepare_branch_sets_its_own_identity_without_any_ambient_config(
+    tmp_path: Path, origin_and_clone: tuple[Path, Path]
+) -> None:
+    """Regression: a fresh `actions/checkout` in CI has no git identity at
+    all — `git commit` fails outright ("Author identity unknown") without
+    one. prepare_branch must never depend on the environment already having
+    one configured.
+    """
+    _origin, clone = origin_and_clone
+    new_products = tmp_path / "new_products.json"
+    new_products.write_text('[{"id": "1"}]\n', encoding="utf-8")
+
+    prepare_branch(
+        clone,
+        branch_name="pipeline/auto-update-products",
+        base_branch="main",
+        files_to_update={Path("public/data/products.json"): new_products},
+        commit_message="chore: update",
+    )
+
+    name = subprocess.run(
+        ["git", "config", "user.name"], cwd=clone, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    email = subprocess.run(
+        ["git", "config", "user.email"], cwd=clone, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert name == BOT_NAME
+    assert email == BOT_EMAIL
+    author = subprocess.run(
+        ["git", "log", "-1", "--format=%an <%ae>"], cwd=clone, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert author == f"{BOT_NAME} <{BOT_EMAIL}>"
 
 
 def test_prepare_branch_no_changes_when_content_identical(tmp_path: Path, origin_and_clone: tuple[Path, Path]) -> None:

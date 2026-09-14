@@ -30,8 +30,8 @@ def catalogo_clone(tmp_path: Path) -> Path:
 
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", str(origin), str(clone)], check=True, capture_output=True, text=True)
-    _git(["config", "user.email", "bot@example.com"], clone)
-    _git(["config", "user.name", "Bot"], clone)
+    # No identity configured here either — run_publish must work on a
+    # bare-fresh checkout like CI's, same as tested in test_git_ops.py.
     return clone
 
 
