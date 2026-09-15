@@ -1,0 +1,30 @@
+# Revisor automático con Claude Code. Es asesor, no bloquea el merge:
+# comenta en el PR pero no forma parte de los required status checks.
+# Secret a configurar en este repo (Settings > Secrets and variables >
+# Actions): ANTHROPIC_API_KEY.
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Revisá este pull request de renovarte-pipeline (Python, ingesta/transformación
+            de datos de catálogo). Buscá bugs, problemas de seguridad y regresiones. Sé
+            concreto y conciso, y comentá solo lo que encuentres.
+          allowed_tools: "Bash(gh pr comment:*)"
