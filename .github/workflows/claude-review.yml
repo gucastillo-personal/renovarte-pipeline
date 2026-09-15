@@ -27,4 +27,3 @@ jobs:
             Revisá este pull request de renovarte-pipeline (Python, ingesta/transformación
             de datos de catálogo). Buscá bugs, problemas de seguridad y regresiones. Sé
             concreto y conciso, y comentá solo lo que encuentres.
-          claude_args: '--allowed-tools "Bash(gh pr comment:*)"'
