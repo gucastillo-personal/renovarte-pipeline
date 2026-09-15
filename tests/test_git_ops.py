@@ -119,6 +119,8 @@ def test_prepare_branch_resets_stale_local_branch(tmp_path: Path, origin_and_clo
     """
     _origin, clone = origin_and_clone
     _git(["checkout", "-b", "pipeline/auto-update-products"], clone)
+    _git(["config", "user.email", "test@example.com"], clone)
+    _git(["config", "user.name", "Test"], clone)
     (clone / "stray.txt").write_text("leftover from a previous run\n", encoding="utf-8")
     _git(["add", "stray.txt"], clone)
     _git(["commit", "-m", "stale commit"], clone)
