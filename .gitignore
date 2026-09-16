@@ -5,6 +5,9 @@ data/private/
 .env
 .env.local
 
+# Artefacto efímero de CI: insumo del POC event-driven (renovarte-events)
+data/price-changes.json
+
 # Python
 __pycache__/
 *.pyc
