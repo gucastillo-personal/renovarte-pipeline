@@ -17,6 +17,14 @@
 #   CATALOGO_PAT — fine-grained PAT, scoped SOLO a renovarte-catalogo,
 #     permisos Contents (read/write) + Pull requests (read/write). Nunca
 #     un PAT con acceso a toda la cuenta.
+#
+# Secrets/vars adicionales para el POC event-driven (renovarte-events),
+# best-effort — ver los pasos "(POC event-driven)" más abajo:
+#   RENOVARTE_EVENTS_AWS_ACCESS_KEY_ID / RENOVARTE_EVENTS_AWS_SECRET_ACCESS_KEY
+#     — credenciales de un IAM user con permiso ÚNICO sns:Publish sobre el
+#     topic (nunca credenciales admin).
+#   RENOVARTE_EVENTS_SNS_TOPIC_ARN (variable, no secret — un ARN no es
+#     sensible) — output `sns_topic_arn` de renovarte-events/infra.
 name: Publicar catálogo
 
 on:
@@ -48,3 +56,33 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CATALOGO_PAT }}
         run: uv run renovarte-pipeline publish --catalogo catalogo-checkout --live
+
+      # --- A partir de acá: POC event-driven (notificación de cambios de
+      # precio, ver renovarte-events). Best-effort a propósito: si cualquiera
+      # de estos pasos falla, el job sigue en verde — el PR real al catálogo
+      # ya se abrió arriba y es lo único que importa en producción.
+      - name: (POC event-driven) Checkout renovarte-events
+        if: always()
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gucastillo-personal/renovarte-events
+          path: events-checkout
+
+      - name: (POC event-driven) Instalar uv para el producer
+        if: always()
+        continue-on-error: true
+        uses: astral-sh/setup-uv@v3
+
+      - name: (POC event-driven) Publicar evento de cambios de precio
+        if: always()
+        continue-on-error: true
+        working-directory: events-checkout/producer
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RENOVARTE_EVENTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RENOVARTE_EVENTS_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          SNS_TOPIC_ARN: ${{ vars.RENOVARTE_EVENTS_SNS_TOPIC_ARN }}
+        run: |
+          uv sync --locked
+          uv run renovarte-events-producer publish --input ../../data/price-changes.json
