@@ -18,19 +18,25 @@
 #     permisos Contents (read/write) + Pull requests (read/write). Nunca
 #     un PAT con acceso a toda la cuenta.
 #
-# Secrets/vars adicionales para el POC event-driven (renovarte-events),
-# best-effort — ver los pasos "(POC event-driven)" más abajo:
-#   RENOVARTE_EVENTS_AWS_ACCESS_KEY_ID / RENOVARTE_EVENTS_AWS_SECRET_ACCESS_KEY
-#     — credenciales de un IAM user con permiso ÚNICO sns:Publish sobre el
-#     topic (nunca credenciales admin).
-#   RENOVARTE_EVENTS_SNS_TOPIC_ARN (variable, no secret — un ARN no es
-#     sensible) — output `sns_topic_arn` de renovarte-events/infra.
+# Vars adicionales para el POC event-driven (renovarte-events), best-effort
+# — ver los pasos "(POC event-driven)" más abajo. Sin secrets de AWS: la
+# autenticación es OIDC (aws-actions/configure-aws-credentials asume un rol
+# de IAM scoped a sns:Publish sobre el topic, sin ninguna access key de
+# larga duración guardada acá):
+#   RENOVARTE_EVENTS_GITHUB_ACTIONS_ROLE_ARN — output `github_actions_role_arn`
+#     de renovarte-events/infra.
+#   RENOVARTE_EVENTS_SNS_TOPIC_ARN — output `sns_topic_arn` de renovarte-events/infra.
+# (Ambas son variables, no secrets — ningún ARN es sensible.)
 name: Publicar catálogo
 
 on:
   schedule:
     - cron: "0 9 * * 1" # lunes 09:00 UTC — no-op si nadie commiteó un products.json nuevo
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # requerido por aws-actions/configure-aws-credentials (OIDC)
 
 jobs:
   publish:
@@ -74,14 +80,19 @@ jobs:
         continue-on-error: true
         uses: astral-sh/setup-uv@v3
 
+      - name: (POC event-driven) Asumir rol de AWS vía OIDC (sin access keys)
+        if: always()
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.RENOVARTE_EVENTS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: us-east-1
+
       - name: (POC event-driven) Publicar evento de cambios de precio
         if: always()
         continue-on-error: true
         working-directory: events-checkout/producer
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.RENOVARTE_EVENTS_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.RENOVARTE_EVENTS_AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
           SNS_TOPIC_ARN: ${{ vars.RENOVARTE_EVENTS_SNS_TOPIC_ARN }}
         run: |
           uv sync --locked
