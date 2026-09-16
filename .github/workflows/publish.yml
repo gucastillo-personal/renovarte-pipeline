@@ -9,8 +9,11 @@
 #
 # Flujo: admin corre `make ingest && make transform` (y `make pdf-extract`
 # cuando cambia el PDF) localmente, revisa el diff de
-# public/data/products.json, lo commitea y pushea a renovarte-pipeline —
-# recién ahí esta Action tiene algo nuevo para publicar (manual o cron).
+# public/data/products.json, y lo sube por PR a este repo (ci.yml corre
+# `make check` en ese PR). Al mergear a `main`, el push dispara esta
+# Action automáticamente — sin cron: el evento real (un products.json
+# nuevo en main) es el disparador, no un horario fijo.
+# workflow_dispatch queda como fallback manual (re-correr, debug).
 #
 # Secret a configurar en este repo (Settings > Secrets and variables >
 # Actions):
@@ -30,8 +33,10 @@
 name: Publicar catálogo
 
 on:
-  schedule:
-    - cron: "0 9 * * 1" # lunes 09:00 UTC — no-op si nadie commiteó un products.json nuevo
+  push:
+    branches: [main]
+    paths:
+      - "public/data/products.json"
   workflow_dispatch: {}
 
 permissions:
