@@ -1,8 +1,10 @@
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from pipeline.models import Product
 from pipeline.publish.run import run_publish
 
 
@@ -66,7 +68,12 @@ def test_no_changes_reports_and_skips_everything(tmp_path: Path, catalogo_clone:
     same = tmp_path / "products.json"
     same.write_text("[]\n", encoding="utf-8")  # identical to seeded content
 
-    result = run_publish(products_json_path=same, catalogo_path=catalogo_clone, dry_run=True)
+    result = run_publish(
+        products_json_path=same,
+        catalogo_path=catalogo_clone,
+        dry_run=True,
+        price_diff_path=tmp_path / "unused-price-changes.json",
+    )
 
     assert result.has_changes is False
     assert result.opened_pr_url is None
@@ -108,3 +115,57 @@ def test_without_token_falls_back_to_dry_run_even_if_dry_run_false(
 
     assert result.opened_pr_url is None
     assert "dry-run" in result.message
+
+
+def _product(id: str, precio_venta: int, nombre: str = "Producto") -> Product:
+    return Product(
+        id=id,
+        proveedor="LACA",
+        categoria="Uñas",
+        nombre=nombre,
+        presentacion="15ml",
+        descripcion="",
+        precio_venta=precio_venta,
+        imagen="/img/laca/x.svg",
+        en_oferta=False,
+        tags=[],
+    )
+
+
+def test_writes_price_diff_file_when_prices_change(tmp_path: Path, catalogo_clone: Path) -> None:
+    # compute_price_diff lee el products.json ya publicado directo del disco,
+    # antes de que prepare_branch lo pise — no hace falta commitear esto.
+    (catalogo_clone / "public" / "data" / "products.json").write_text(
+        json.dumps([_product("1", 1000, "Esmalte").to_public_dict()]), encoding="utf-8"
+    )
+    new_path = tmp_path / "products.json"
+    new_path.write_text(json.dumps([_product("1", 1200, "Esmalte").to_public_dict()]), encoding="utf-8")
+    price_diff_path = tmp_path / "price-changes.json"
+
+    run_publish(
+        products_json_path=new_path,
+        catalogo_path=catalogo_clone,
+        dry_run=True,
+        price_diff_path=price_diff_path,
+    )
+
+    payload = json.loads(price_diff_path.read_text(encoding="utf-8"))
+    assert payload["changes"] == [
+        {"kind": "price_up", "id": "1", "nombre": "Esmalte", "old_price": 1000, "new_price": 1200}
+    ]
+
+
+def test_price_diff_failure_never_blocks_the_real_publish(tmp_path: Path, catalogo_clone: Path) -> None:
+    clean = tmp_path / "products.json"
+    clean.write_text('[{"id": "1"}]\n', encoding="utf-8")  # no cumple el schema de Product
+    price_diff_path = tmp_path / "price-changes.json"
+
+    result = run_publish(
+        products_json_path=clean,
+        catalogo_path=catalogo_clone,
+        dry_run=True,
+        price_diff_path=price_diff_path,
+    )
+
+    assert result.has_changes is True  # el publish real sigue andando...
+    assert not price_diff_path.exists()  # ...aunque el price-diff no se haya podido generar

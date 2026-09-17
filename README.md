@@ -91,7 +91,7 @@ uv run mypy          # type check
 
 ```
 Makefile                       # atajos: make help
-.github/workflows/publish.yml  # cron + disparo manual: SOLO publish (ingest/transform son manuales)
+.github/workflows/publish.yml  # push a main (products.json nuevo): SOLO publish (ingest/transform son manuales)
 src/pipeline/
 ├── models.py      # Product (schema público, RFC-0001 §2.4) y CostRow (interno)
 ├── cli.py         # entry point: ingest / transform / publish / pdf-extract
@@ -116,10 +116,12 @@ en cada corrida — no acumula commits viejos), corre el leak-check
 push+abre PR. Sin `--live` (o sin `GITHUB_TOKEN`), queda en dry-run: prepara
 todo localmente y no toca GitHub.
 
-`.github/workflows/publish.yml` corre solo `publish --live`, en un cron
-semanal (no-op si nadie commiteó un `products.json` nuevo) + disparo
-manual. Para activarlo, cargar este secret en **Settings → Secrets and
-variables → Actions** de este repo en GitHub:
+`.github/workflows/publish.yml` corre solo `publish --live`, disparado
+automáticamente por un `push` a `main` que toque
+`public/data/products.json` (es decir, al mergear el PR con el catálogo
+nuevo) — sin cron, el evento real es el disparador. `workflow_dispatch`
+queda como fallback manual. Para activarlo, cargar este secret en
+**Settings → Secrets and variables → Actions** de este repo en GitHub:
 
 | Secret | Para qué |
 |---|---|
@@ -140,9 +142,9 @@ corren en CI.)
    `renovarte-pipeline` (nunca commitearlo, nunca pegarlo en un chat).
 
 Flujo típico: `make ingest && make transform` (o `make pdf-extract` primero
-si cambió el PDF) → revisar el diff → commitear y pushear
-`public/data/products.json` → disparar la Action a mano desde GitHub (o
-esperar el cron semanal) → revisar y mergear el PR en `renovarte-catalogo`.
+si cambió el PDF) → revisar el diff → subir `public/data/products.json`
+por PR a este repo → mergear a `main` (dispara `publish.yml` solo) →
+revisar y mergear el PR que se abre en `renovarte-catalogo`.
 
 ## Seguridad
 
