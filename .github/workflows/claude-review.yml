@@ -28,3 +28,6 @@ jobs:
             de datos de catálogo). Buscá bugs, problemas de seguridad y regresiones. Sé
             concreto y conciso, y comentá solo lo que encuentres.
           allowed_tools: "Bash(gh pr comment:*)"
+          # TEMPORAL: para diagnosticar el error "is_error:true" del run. Sacar
+          # este flag una vez identificada la causa (expone el output completo).
+          show_full_output: true

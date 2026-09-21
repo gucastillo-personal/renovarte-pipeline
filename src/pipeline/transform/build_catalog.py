@@ -44,12 +44,14 @@ def build_catalog(
     out_path: str | Path,
     offers: dict[str, Offer] | None = None,
     pdf_prices: dict[str, int] | None = None,
+    category_groups_by_codigo: dict[str, list[str]] | None = None,
 ) -> BuildCatalogResult:
     if len(rows) == 0:
         raise ValueError("transform abortado: no hay productos para procesar")
 
     offers = offers or {}
     pdf_prices = pdf_prices or {}
+    category_groups_by_codigo = category_groups_by_codigo or {}
 
     # Normalise category names (spec 0009 AC-5) and flag manual offers
     # (spec 0005) before anything groups or builds.
@@ -104,8 +106,9 @@ def build_catalog(
             # discount, so a discounted product gets the discount computed
             # on the resolved price, not on a plain costo+margen figure.
             pdf_price = pdf_prices.get(row.codigo.strip())
+            cod_categoria = category_groups_by_codigo.get(row.codigo.strip())
 
-            products.append(build_public_product(row, margin, descuento_pct, pdf_price))
+            products.append(build_public_product(row, margin, descuento_pct, pdf_price, cod_categoria))
         except Exception as error:
             errors.append(f"item {index + 1}: {error}")
 
@@ -130,8 +133,15 @@ def build_catalog_from_csv(
     public_dir: str | Path,
     offers: dict[str, Offer] | None = None,
     pdf_prices: dict[str, int] | None = None,
+    category_groups_by_codigo: dict[str, list[str]] | None = None,
 ) -> BuildCatalogResult:
-    """CSV-source convenience wrapper (spec 0002 fallback)."""
+    """CSV-source convenience wrapper (spec 0002 fallback).
+
+    `category_groups_by_codigo` defaults to `None`/empty: the CSV channel
+    doesn't go through Serlaca's per-group API calls, so every CSV product
+    falls back to `codCategoria: ["4"]` unless a caller explicitly
+    provides a mapping (spec 0001, plan.md §5).
+    """
     rows, warnings = read_csv_cost_rows(csv_path, public_dir)
-    result = build_catalog(rows, env, out_path, offers, pdf_prices)
+    result = build_catalog(rows, env, out_path, offers, pdf_prices, category_groups_by_codigo)
     return BuildCatalogResult(products=result.products, warnings=[*warnings, *result.warnings])

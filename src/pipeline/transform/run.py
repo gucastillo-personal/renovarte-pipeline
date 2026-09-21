@@ -49,9 +49,14 @@ def run(
         data_objects = dump.get("dataObjects")
         if not isinstance(data_objects, list):
             raise ValueError(f"{in_path} no tiene un array `dataObjects`")
+        category_groups_by_codigo = dump.get("categoryGroupsByProductCode")
+        if not isinstance(category_groups_by_codigo, dict):
+            # Crudo viejo, bajado antes de la spec 0001 — degradación
+            # graciosa, todo producto cae al fallback codCategoria=["4"].
+            category_groups_by_codigo = {}
 
         mapped = raw_to_cost_rows(data_objects, image_base=env.get("SERLACA_IMAGE_BASE") or DEFAULT_IMAGE_BASE)
-        built = build_catalog(mapped.rows, env, out_path, offers, pdf_prices)
+        built = build_catalog(mapped.rows, env, out_path, offers, pdf_prices, category_groups_by_codigo)
         result = BuildCatalogResult(products=built.products, warnings=[*mapped.warnings, *built.warnings])
 
     for warning in result.warnings:

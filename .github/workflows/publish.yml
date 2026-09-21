@@ -9,20 +9,39 @@
 #
 # Flujo: admin corre `make ingest && make transform` (y `make pdf-extract`
 # cuando cambia el PDF) localmente, revisa el diff de
-# public/data/products.json, lo commitea y pushea a renovarte-pipeline —
-# recién ahí esta Action tiene algo nuevo para publicar (manual o cron).
+# public/data/products.json, y lo sube por PR a este repo (ci.yml corre
+# `make check` en ese PR). Al mergear a `main`, el push dispara esta
+# Action automáticamente — sin cron: el evento real (un products.json
+# nuevo en main) es el disparador, no un horario fijo.
+# workflow_dispatch queda como fallback manual (re-correr, debug).
 #
 # Secret a configurar en este repo (Settings > Secrets and variables >
 # Actions):
 #   CATALOGO_PAT — fine-grained PAT, scoped SOLO a renovarte-catalogo,
 #     permisos Contents (read/write) + Pull requests (read/write). Nunca
 #     un PAT con acceso a toda la cuenta.
+#
+# Vars adicionales para el POC event-driven (renovarte-events), best-effort
+# — ver los pasos "(POC event-driven)" más abajo. Sin secrets de AWS: la
+# autenticación es OIDC (aws-actions/configure-aws-credentials asume un rol
+# de IAM scoped a sns:Publish sobre el topic, sin ninguna access key de
+# larga duración guardada acá):
+#   RENOVARTE_EVENTS_GITHUB_ACTIONS_ROLE_ARN — output `github_actions_role_arn`
+#     de renovarte-events/infra.
+#   RENOVARTE_EVENTS_SNS_TOPIC_ARN — output `sns_topic_arn` de renovarte-events/infra.
+# (Ambas son variables, no secrets — ningún ARN es sensible.)
 name: Publicar catálogo
 
 on:
-  schedule:
-    - cron: "0 9 * * 1" # lunes 09:00 UTC — no-op si nadie commiteó un products.json nuevo
+  push:
+    branches: [main]
+    paths:
+      - "public/data/products.json"
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # requerido por aws-actions/configure-aws-credentials (OIDC)
 
 jobs:
   publish:
@@ -48,3 +67,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CATALOGO_PAT }}
         run: uv run renovarte-pipeline publish --catalogo catalogo-checkout --live
+
+      # --- A partir de acá: POC event-driven (notificación de cambios de
+      # precio, ver renovarte-events). Best-effort a propósito: si cualquiera
+      # de estos pasos falla, el job sigue en verde — el PR real al catálogo
+      # ya se abrió arriba y es lo único que importa en producción.
+      - name: (POC event-driven) Checkout renovarte-events
+        if: always()
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gucastillo-personal/renovarte-events
+          path: events-checkout
+
+      - name: (POC event-driven) Instalar uv para el producer
+        if: always()
+        continue-on-error: true
+        uses: astral-sh/setup-uv@v3
+
+      - name: (POC event-driven) Asumir rol de AWS vía OIDC (sin access keys)
+        if: always()
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.RENOVARTE_EVENTS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: (POC event-driven) Publicar evento de cambios de precio
+        if: always()
+        continue-on-error: true
+        working-directory: events-checkout/producer
+        env:
+          SNS_TOPIC_ARN: ${{ vars.RENOVARTE_EVENTS_SNS_TOPIC_ARN }}
+        run: |
+          uv sync --locked
+          uv run renovarte-events-producer publish --input ../../data/price-changes.json

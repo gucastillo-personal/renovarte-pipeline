@@ -3,17 +3,25 @@ renovarte-catalogo. Nunca push directo a `main`; sin token o en dry-run
 deja la rama lista en el checkout local pero no la pushea ni abre PR.
 """
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from pipeline.publish.git_ops import prepare_branch, push_branch
 from pipeline.publish.github_api import open_pull_request
 from pipeline.publish.leak_check import check_file_for_leaks
+from pipeline.publish.price_diff import compute_price_diff, write_price_diff
 
 DEFAULT_REPO = "gucastillo-personal/renovarte-catalogo"
 DEFAULT_BRANCH = "pipeline/auto-update-products"
 DEFAULT_BASE_BRANCH = "main"
 DEST_REL_PATH = Path("public") / "data" / "products.json"
+DEFAULT_PRICE_DIFF_PATH = Path("data") / "price-changes.json"
+# spec 0001, plan.md §6bis: pipeline es la única fuente de verdad del mapeo
+# codCategoria -> nombre de grupo; se publica junto con products.json en el
+# mismo PR/commit, no en uno separado.
+CATEGORY_GROUPS_DEST_REL_PATH = Path("public") / "data" / "serlaca_category_groups.json"
+DEFAULT_CATEGORY_GROUPS_PATH = Path("data") / "reference" / "serlaca_category_groups.json"
 
 
 @dataclass
@@ -31,9 +39,12 @@ def run_publish(
     base_branch: str = DEFAULT_BASE_BRANCH,
     github_token: str | None = None,
     dry_run: bool = True,
+    price_diff_path: str | Path | None = None,
+    category_groups_path: str | Path = DEFAULT_CATEGORY_GROUPS_PATH,
 ) -> PublishResult:
     products_json_path = Path(products_json_path)
     catalogo_path = Path(catalogo_path)
+    category_groups_path = Path(category_groups_path)
 
     hits = check_file_for_leaks(products_json_path)
     if hits:
@@ -43,12 +54,32 @@ def run_publish(
             "Costo/margen no puede llegar a un archivo público (constitution §I)."
         )
 
+    files_to_update = {DEST_REL_PATH: products_json_path}
+    if category_groups_path.exists():
+        group_hits = check_file_for_leaks(category_groups_path)
+        if group_hits:
+            joined = "; ".join(f"{h.token!r}" for h in group_hits)
+            raise ValueError(
+                f"leak-check FALLÓ en {category_groups_path} ({joined}) — no se toca renovarte-catalogo. "
+                "Costo/margen no puede llegar a un archivo público (constitution §I)."
+            )
+        files_to_update[CATEGORY_GROUPS_DEST_REL_PATH] = category_groups_path
+
+    # POC event-driven (renovarte-events): best-effort, nunca bloquea la
+    # publicación real al catálogo. Tiene que leerse antes de prepare_branch,
+    # que pisa DEST_REL_PATH con el products.json nuevo.
+    try:
+        changes = compute_price_diff(catalogo_path / DEST_REL_PATH, products_json_path)
+        write_price_diff(changes, Path(price_diff_path) if price_diff_path else DEFAULT_PRICE_DIFF_PATH)
+    except Exception as error:  # best-effort a propósito: nunca bloquea la publicación real
+        print(f"⚠ price-diff no generado (no bloqueante): {error}", file=sys.stderr)
+
     commit_message = "chore(data): actualizar products.json (renovarte-pipeline)"
     prepared = prepare_branch(
         catalogo_path,
         branch_name,
         base_branch,
-        {DEST_REL_PATH: products_json_path},
+        files_to_update,
         commit_message,
     )
 

@@ -38,6 +38,13 @@ class Product(BaseModel):
     id: str
     proveedor: str
     categoria: str
+    # High-level grouping (spec 0001, RFC-0001 §2.4 amended 2026-09-17,
+    # type updated 2026-09-18): one or more of Serlaca's real
+    # productCategoryIds ("1"/"2"/"3"), or ["4"] (fallback) when the
+    # product didn't match any of them. A product can belong to more than
+    # one group at once — verified against the real API 2026-09-17 (see
+    # docs/serlaca-api.md), so this is a list, never a bare string.
+    codCategoria: list[str]
     nombre: str
     presentacion: str
     descripcion: str
@@ -47,6 +54,22 @@ class Product(BaseModel):
     imagen: str
     en_oferta: bool
     tags: list[str]
+
+    @model_validator(mode="after")
+    def _check_cod_categoria(self) -> "Product":
+        """`codCategoria` (spec 0001, AC-2/AC-3): nunca vacío, y cada id
+        tiene que ser uno de los cuatro válidos — falla rápido ante un bug
+        de `ingest`/`transform`, no solo ante el campo ausente.
+        """
+        if not self.codCategoria:
+            raise ValueError("codCategoria no puede ser una lista vacía")
+        allowed = {"1", "2", "3", "4"}
+        invalid = [cod for cod in self.codCategoria if cod not in allowed]
+        if invalid:
+            raise ValueError(
+                f"codCategoria contiene id(s) inválido(s): {invalid} (válidos: {sorted(allowed)})"
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_offer_fields(self) -> "Product":

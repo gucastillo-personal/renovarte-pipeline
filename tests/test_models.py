@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from pipeline.models import CostRow, Product
 
 
@@ -22,6 +25,7 @@ def test_product_to_public_dict_omits_absent_offer_fields() -> None:
         id="545300004",
         proveedor="LACA",
         categoria="Uñas",
+        codCategoria=["2", "3"],
         nombre="Esmalte semipermanente",
         presentacion="15ml",
         descripcion="",
@@ -41,6 +45,7 @@ def test_product_keeps_offer_fields_when_present() -> None:
         id="545300004",
         proveedor="LACA",
         categoria="Uñas",
+        codCategoria=["2"],
         nombre="Esmalte semipermanente",
         presentacion="15ml",
         descripcion="",
@@ -54,3 +59,34 @@ def test_product_keeps_offer_fields_when_present() -> None:
     public = product.to_public_dict()
     assert public["precio_regular"] == 1200
     assert public["descuento_pct"] == 10
+
+
+def _base_product_fields() -> dict[str, object]:
+    return {
+        "id": "545300004",
+        "proveedor": "LACA",
+        "categoria": "Uñas",
+        "codCategoria": ["2"],
+        "nombre": "Esmalte semipermanente",
+        "presentacion": "15ml",
+        "descripcion": "",
+        "precio_venta": 1200,
+        "imagen": "/img/laca/545300004.svg",
+        "en_oferta": False,
+        "tags": [],
+    }
+
+
+def test_product_requires_non_empty_cod_categoria() -> None:
+    with pytest.raises(ValidationError, match="codCategoria"):
+        Product(**{**_base_product_fields(), "codCategoria": []})  # type: ignore[arg-type]
+
+
+def test_product_rejects_invalid_cod_categoria_id() -> None:
+    with pytest.raises(ValidationError, match="codCategoria"):
+        Product(**{**_base_product_fields(), "codCategoria": ["9"]})  # type: ignore[arg-type]
+
+
+def test_product_accepts_more_than_one_cod_categoria() -> None:
+    product = Product(**{**_base_product_fields(), "codCategoria": ["1", "2"]})  # type: ignore[arg-type]
+    assert product.codCategoria == ["1", "2"]
