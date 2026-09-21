@@ -178,3 +178,48 @@ ver `transform/pricing.py`.
   `SERLACA_IMAGE_BASE=https://www.laboratoriolaca.com`; `renovarte-catalogo`'s
   `next.config.ts` `remotePatterns` incluye `www.laboratoriolaca.com` y
   `laboratoriolaca.com`.
+
+### `productCategoryIds` por `productLine` — verificación spec 0001 AC-1 (2026-09-17)
+
+Corrida real con `renovarte-pipeline verify-category-groups` (credenciales
+reales, `data/input/category-group-report.json`, gitignored). Pide
+`productCategoryIds: ["1"]` / `["2"]` / `["3"]` por separado y agrupa lo que
+cada una devuelve por `productLine.name` (limpio con `clean_category`).
+
+**Resultado: CON EXCEPCIONES — bloqueante para spec 0001.** De las 24
+categorías específicas (`productLine`) hoy cargadas, **11 aparecen
+repartidas entre más de un `productCategoryIds`** (no son mutuamente
+excluyentes por categoría):
+
+| Categoría | Grupos donde aparece |
+|---|---|
+| `Correctores e Iluminadores` | `2`, `3` |
+| `Cuidados Básicos` | `1`, `2` |
+| `Delineadores` | `2`, `3` |
+| `LACA Beauty` | `1`, `2` |
+| `Labios` | `1`, `2`, `3` |
+| `Pestañas y Cejas` | `2`, `3` |
+| `Protección Solar` | `1`, `2` |
+| `Rostro` | `2`, `3` |
+| `Sombras` | `2`, `3` |
+| `Teens` | `1`, `2` |
+| `Uñas` | `2`, `3` |
+
+Las otras 13 categorías sí caen limpio en un único grupo (`Antiage`,
+`Cuidados Masculinos`, `Dr. Enero`, `Hidratación`, `Pieles Delicadas`,
+`Pieles Grasas`, `Renovación Celular` → `1`; `Corporales`, `Cuidados
+Capilares`, `Fragancias`, `Manos y Pies`, `Sensorial` → `2`; `Pinceles y
+Paletas` → `3`). `"1"`/`"2"`/`"3"` fueron, en efecto, los únicos ids que
+devolvió la API en esta corrida (ninguna categoría quedó sin match en
+ninguno de los tres).
+
+**Consecuencia:** el diseño de `plan.md` §1(B) — mapeo por
+categoría-específica-completa (`CATEGORY_GROUP_BY_CATEGORIA: dict[categoria,
+id]`) — no es válido tal cual para estas 11 categorías: un mismo
+`productLine` tiene productos individuales en más de un
+`productCategoryIds` de Serlaca. Clasificar correctamente requeriría el/los
+id(s) de grupo **por producto**, no inferido de `categoria` en `transform`
+(ver `plan.md` §10, exactamente el riesgo que ese párrafo anticipaba). Este
+hallazgo se reporta como bloqueante de spec 0001 — no se implementó
+`pipeline/transform/category_groups.py` ni se tocó el resto del pipeline
+sobre esta base; vuelve al `plan.md` antes de seguir.

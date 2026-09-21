@@ -10,6 +10,7 @@ def _product(id: str, precio_venta: int, nombre: str = "Producto") -> Product:
         id=id,
         proveedor="LACA",
         categoria="Uñas",
+        codCategoria=["2"],
         nombre=nombre,
         presentacion="15ml",
         descripcion="",

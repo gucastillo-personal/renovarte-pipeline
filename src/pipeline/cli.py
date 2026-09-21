@@ -48,6 +48,24 @@ def cmd_transform(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_verify_category_groups(args: argparse.Namespace) -> int:
+    """Spot-check manual (AC-1). Actualizado 2026-09-18: una categoría en
+    más de un grupo ya no es un error — `codCategoria` es una lista, un
+    producto puede pertenecer a más de un grupo real a la vez (decisión
+    del CTO/CEO, ver plan.md §1/§6/§10). El código de salida solo refleja
+    si la corrida en sí falló (red, credenciales), no el contenido del
+    reporte.
+    """
+    from pipeline.ingest.verify_category_groups import run
+
+    try:
+        run(_load_env())
+    except Exception as error:
+        print(f"✗ {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_publish(args: argparse.Namespace) -> int:
     from pipeline.publish.run import DEFAULT_BASE_BRANCH, DEFAULT_BRANCH, DEFAULT_REPO, run_publish
     from pipeline.transform.run import DEFAULT_OUT_PATH
@@ -94,6 +112,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--in", dest="in_path", default=None, help="Crudo de entrada (.json de la API o .csv)."
     )
     transform_parser.set_defaults(func=cmd_transform)
+
+    verify_category_groups_parser = subparsers.add_parser(
+        "verify-category-groups",
+        help=(
+            "Verifica contra la API real de Serlaca el mapeo codCategoria "
+            "('1'/'2'/'3' -> Cuidado facial/corporal/Cosmética) antes de darlo por definitivo (spec 0001, AC-1)."
+        ),
+    )
+    verify_category_groups_parser.set_defaults(func=cmd_verify_category_groups)
 
     publish_parser = subparsers.add_parser(
         "publish", help="Abre un PR a renovarte-catalogo con el products.json generado."

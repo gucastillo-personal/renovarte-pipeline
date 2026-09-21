@@ -17,6 +17,11 @@ DEFAULT_BRANCH = "pipeline/auto-update-products"
 DEFAULT_BASE_BRANCH = "main"
 DEST_REL_PATH = Path("public") / "data" / "products.json"
 DEFAULT_PRICE_DIFF_PATH = Path("data") / "price-changes.json"
+# spec 0001, plan.md §6bis: pipeline es la única fuente de verdad del mapeo
+# codCategoria -> nombre de grupo; se publica junto con products.json en el
+# mismo PR/commit, no en uno separado.
+CATEGORY_GROUPS_DEST_REL_PATH = Path("public") / "data" / "serlaca_category_groups.json"
+DEFAULT_CATEGORY_GROUPS_PATH = Path("data") / "reference" / "serlaca_category_groups.json"
 
 
 @dataclass
@@ -35,9 +40,11 @@ def run_publish(
     github_token: str | None = None,
     dry_run: bool = True,
     price_diff_path: str | Path | None = None,
+    category_groups_path: str | Path = DEFAULT_CATEGORY_GROUPS_PATH,
 ) -> PublishResult:
     products_json_path = Path(products_json_path)
     catalogo_path = Path(catalogo_path)
+    category_groups_path = Path(category_groups_path)
 
     hits = check_file_for_leaks(products_json_path)
     if hits:
@@ -46,6 +53,17 @@ def run_publish(
             f"leak-check FALLÓ ({joined}) — no se toca renovarte-catalogo. "
             "Costo/margen no puede llegar a un archivo público (constitution §I)."
         )
+
+    files_to_update = {DEST_REL_PATH: products_json_path}
+    if category_groups_path.exists():
+        group_hits = check_file_for_leaks(category_groups_path)
+        if group_hits:
+            joined = "; ".join(f"{h.token!r}" for h in group_hits)
+            raise ValueError(
+                f"leak-check FALLÓ en {category_groups_path} ({joined}) — no se toca renovarte-catalogo. "
+                "Costo/margen no puede llegar a un archivo público (constitution §I)."
+            )
+        files_to_update[CATEGORY_GROUPS_DEST_REL_PATH] = category_groups_path
 
     # POC event-driven (renovarte-events): best-effort, nunca bloquea la
     # publicación real al catálogo. Tiene que leerse antes de prepare_branch,
@@ -61,7 +79,7 @@ def run_publish(
         catalogo_path,
         branch_name,
         base_branch,
-        {DEST_REL_PATH: products_json_path},
+        files_to_update,
         commit_message,
     )
 

@@ -8,6 +8,7 @@ import math
 import re
 
 from pipeline.models import CostRow, Product
+from pipeline.transform.category_groups import resolve_cod_categoria
 
 _NON_WORD_RE = re.compile(r"\s+")
 
@@ -52,11 +53,18 @@ def build_public_product(
     margin: float,
     descuento_pct: float | None = None,
     pdf_price: int | None = None,
+    cod_categoria: list[str] | None = None,
 ) -> Product:
     """Build one public product from a normalised `CostRow`.
 
     The cost (`precio_costo`) and the margin are consumed here and never
     stored (constitution §I).
+
+    `cod_categoria` (spec 0001): the raw Serlaca group id(s) — "1"/"2"/"3",
+    possibly more than one — resolved for this `codigo` by `build_catalog`
+    from the per-product mapping `ingest` persisted in the raw dump. Passed
+    through `resolve_cod_categoria` (which applies the `["4"]` fallback
+    when `None`/empty) before being stored on `Product`.
 
     `descuento_pct` (spec 0007, from `data/offers.json`): when > 0, the
     regular price is kept as `precio_regular` and `precio_venta` becomes the
@@ -89,6 +97,7 @@ def build_public_product(
         id=row.codigo,
         proveedor="LACA",
         categoria=row.categoria,
+        codCategoria=resolve_cod_categoria(cod_categoria),
         nombre=row.nombre,
         presentacion=row.presentacion,
         descripcion=row.descripcion,
