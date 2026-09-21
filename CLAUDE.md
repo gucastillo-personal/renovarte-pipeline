@@ -3,6 +3,16 @@
 Estas reglas aplican a cualquier sesión de Claude Code (o cualquier agente)
 que trabaje en este repo, no solo a la sesión que las escribió.
 
+## Nunca commitear ni pushear directo a `main`
+
+Ningún agente commitea ni pushea directo sobre `main` en este repo,
+incluidos cambios "chicos" como docs o config. Todo trabajo arranca
+creando una rama dedicada (`feature/<slug>`, `hotfix/<slug>`,
+`chore/<slug>`, etc., la que corresponda al tipo de cambio) y llega a
+`main` únicamente vía Pull Request. Es una regla de proceso, además de (no
+en lugar de) la aprobación humana explícita que ya exige cada `git commit`
+y cada `git push` más abajo.
+
 ## Nunca mergear Pull Requests
 
 El merge final a `main` lo ejecuta siempre una persona humana, sin
