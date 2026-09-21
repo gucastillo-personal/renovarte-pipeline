@@ -9,6 +9,25 @@ def test_clean_products_json_has_no_hits(tmp_path: Path) -> None:
     assert check_file_for_leaks(path) == []
 
 
+def test_cod_categoria_and_group_mapping_have_no_hits(tmp_path: Path) -> None:
+    """spec 0001, AC-6: codCategoria (lista de ids) y el archivo de mapeo
+    id -> nombre de grupo no disparan ningún patrón FORBIDDEN.
+    """
+    products = tmp_path / "products.json"
+    products.write_text(
+        '[{"id": "1", "categoria": "Uñas", "codCategoria": ["2", "3"], "precio_venta": 1200, '
+        '"en_oferta": false, "tags": []}]',
+        encoding="utf-8",
+    )
+    assert check_file_for_leaks(products) == []
+
+    groups = tmp_path / "serlaca_category_groups.json"
+    groups.write_text(
+        '{"1": "Cuidado facial", "2": "Cuidado corporal", "3": "Cosmética", "4": "Otros"}', encoding="utf-8"
+    )
+    assert check_file_for_leaks(groups) == []
+
+
 def test_detects_precio_costo(tmp_path: Path) -> None:
     path = tmp_path / "products.json"
     path.write_text('{"precio_costo": 1000}', encoding="utf-8")

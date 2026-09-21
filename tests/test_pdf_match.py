@@ -8,6 +8,7 @@ def _product(**overrides: object) -> Product:
         "id": "001",
         "proveedor": "LACA",
         "categoria": "Antiage",
+        "codCategoria": ["1"],
         "nombre": "Producto Uno",
         "presentacion": "50 g",
         "descripcion": "",
