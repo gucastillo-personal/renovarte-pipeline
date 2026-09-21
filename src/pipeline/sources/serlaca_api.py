@@ -178,6 +178,30 @@ def map_to_cost_row(product: dict[str, Any], image_base: str) -> CostRow:
     )
 
 
+def group_ids_by_product_code(samples: dict[str, list[Any]]) -> dict[str, list[str]]:
+    """Spec 0001: de los mismos `samples` que arma
+    `pipeline.ingest.verify_category_groups.fetch_category_group_samples`
+    (id `"1"`/`"2"`/`"3"` -> `dataObjects` crudos que ese id devolvió),
+    arma `productCode -> lista ordenada de ids donde apareció`.
+
+    Pura, sin red. Un producto puede legítimamente aparecer en más de un
+    id — Serlaca no garantiza que `productCategoryIds` sea mutuamente
+    excluyente por producto (verificado contra la API real 2026-09-17, ver
+    `docs/serlaca-api.md`) — eso ya no es un error, es el dato real que
+    `ingest` persiste para que `transform` arme `codCategoria`.
+    """
+    groups_by_code: dict[str, set[str]] = {}
+    for group_id, objects in samples.items():
+        for obj in objects:
+            if not isinstance(obj, dict):
+                continue
+            code = obj.get("productCode")
+            if not isinstance(code, str) or not code.strip():
+                continue
+            groups_by_code.setdefault(code.strip(), set()).add(group_id)
+    return {code: sorted(groups) for code, groups in groups_by_code.items()}
+
+
 @dataclass
 class RawToCostRowsResult:
     rows: list[CostRow]

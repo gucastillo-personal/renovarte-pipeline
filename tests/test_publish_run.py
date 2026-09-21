@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from pipeline.models import Product
-from pipeline.publish.run import run_publish
+from pipeline.publish.run import DEFAULT_CATEGORY_GROUPS_PATH, run_publish
 
 
 def _git(args: list[str], cwd: Path) -> None:
@@ -25,6 +25,14 @@ def catalogo_clone(tmp_path: Path) -> Path:
     _git(["config", "user.name", "Test"], seed)
     (seed / "public" / "data").mkdir(parents=True)
     (seed / "public" / "data" / "products.json").write_text("[]\n", encoding="utf-8")
+    # Seed the same content `run_publish` would find at its real default
+    # `category_groups_path` (spec 0001, plan.md §6bis) — so tests that
+    # exercise the "nothing changed" path stay meaningful now that
+    # `data/reference/serlaca_category_groups.json` is a real committed
+    # file, not a hypothetical one.
+    (seed / "public" / "data" / "serlaca_category_groups.json").write_bytes(
+        DEFAULT_CATEGORY_GROUPS_PATH.read_bytes()
+    )
     _git(["add", "."], seed)
     _git(["commit", "-m", "seed"], seed)
     _git(["remote", "add", "origin", str(origin)], seed)
@@ -122,6 +130,7 @@ def _product(id: str, precio_venta: int, nombre: str = "Producto") -> Product:
         id=id,
         proveedor="LACA",
         categoria="Uñas",
+        codCategoria=["2"],
         nombre=nombre,
         presentacion="15ml",
         descripcion="",
@@ -169,3 +178,70 @@ def test_price_diff_failure_never_blocks_the_real_publish(tmp_path: Path, catalo
 
     assert result.has_changes is True  # el publish real sigue andando...
     assert not price_diff_path.exists()  # ...aunque el price-diff no se haya podido generar
+
+
+# --- spec 0001, plan.md §6bis: publish distribuye también el mapeo (A) ------
+
+
+def test_category_groups_file_gets_copied_alongside_products_json(
+    tmp_path: Path, catalogo_clone: Path
+) -> None:
+    clean = tmp_path / "products.json"
+    clean.write_text('[{"id": "1"}]\n', encoding="utf-8")
+    groups = tmp_path / "serlaca_category_groups.json"
+    groups.write_text('{"1": "Cuidado facial", "2": "Cuidado corporal"}', encoding="utf-8")
+
+    result = run_publish(
+        products_json_path=clean,
+        catalogo_path=catalogo_clone,
+        dry_run=True,
+        category_groups_path=groups,
+    )
+
+    assert result.has_changes is True
+    committed = (catalogo_clone / "public" / "data" / "serlaca_category_groups.json").read_text(encoding="utf-8")
+    assert committed == '{"1": "Cuidado facial", "2": "Cuidado corporal"}'
+
+
+def test_missing_category_groups_file_degrades_gracefully(tmp_path: Path, catalogo_clone: Path) -> None:
+    """Un `category_groups_path` inexistente no rompe el publish real de
+    `products.json` — mismo criterio de degradación que `load_pdf_prices()`.
+    El seed de `catalogo_clone` ya trae su propio
+    `serlaca_category_groups.json` (commit previo) — sin un
+    `category_groups_path` real para copiar, ese archivo queda tal cual
+    estaba, no se toca.
+    """
+    clean = tmp_path / "products.json"
+    clean.write_text('[{"id": "1"}]\n', encoding="utf-8")
+    dest = catalogo_clone / "public" / "data" / "serlaca_category_groups.json"
+    before = dest.read_text(encoding="utf-8")
+
+    result = run_publish(
+        products_json_path=clean,
+        catalogo_path=catalogo_clone,
+        dry_run=True,
+        category_groups_path=tmp_path / "no-existe.json",
+    )
+
+    assert result.has_changes is True  # products.json sí cambió
+    assert dest.read_text(encoding="utf-8") == before  # el mapeo no se tocó
+
+
+def test_leaking_category_groups_file_blocks_publish_before_touching_the_repo(
+    tmp_path: Path, catalogo_clone: Path
+) -> None:
+    clean = tmp_path / "products.json"
+    clean.write_text('[{"id": "1"}]\n', encoding="utf-8")
+    leaking_groups = tmp_path / "serlaca_category_groups.json"
+    leaking_groups.write_text('{"1": "precio_costo interno"}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="leak-check"):
+        run_publish(
+            products_json_path=clean,
+            catalogo_path=catalogo_clone,
+            dry_run=True,
+            category_groups_path=leaking_groups,
+        )
+
+    result = subprocess.run(["git", "branch"], cwd=catalogo_clone, capture_output=True, text=True, check=True)
+    assert "pipeline/auto-update-products" not in result.stdout

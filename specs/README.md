@@ -42,10 +42,16 @@ Este flujo lo corren, en `renovarte-parent`, los subagentes `product-agent`
 
 | ID | Feature | Status |
 |----|---------|--------|
-| — | (ninguna feature todavía — este repo recién suma su propio spec-kit) | — |
+| [0001](./0001-agrupacion-alto-nivel-categorias/spec.md) | `codCategoria` (`list[str]`, uno o más ids reales de `productCategoryIds` de Serlaca: `"1"` Cuidado facial / `"2"` Cuidado corporal / `"3"` Cosmética / `"4"` fallback — un producto puede pertenecer a más de un grupo a la vez, ver decisión del CTO/CEO 2026-09-18) en `products.json`, más `data/reference/serlaca_category_groups.json` (mapeo id→nombre, committed acá y también publicado por PR a `renovarte-catalogo` vía `publish`), para que `renovarte-catalogo` ofrezca un filtro de dos niveles | **Built** (18 tests nuevos + 4 archivos de test existentes actualizados, 151 tests totales en verde — `make check` 0). `ingest` real (434 crudos) + `transform` real (384 publicados) + `publish --dry-run` contra un clon descartable, todos corridos de punta a punta 2026-09-18 |
 
 ## Traceability matrix (PRD requirement → spec → status)
 
+Ver [`docs/PRD/PRD-pipeline-renovarte.md`](../docs/PRD/PRD-pipeline-renovarte.md)
+para el detalle de cada `RF-`/`RNF-` (primer PRD formal de este repo,
+2026-09-17 — documenta lo ya construido en la migración más el primer
+requisito nuevo).
+
 | Requirement | Summary | Spec(s) | Status |
 |-------------|---------|---------|--------|
-| — | Se completa cuando exista un PRD en `docs/PRD/` con IDs `RF-`/`RNF-` | — | — |
+| RF-01 a RF-08, RNF-01 a RNF-05 | Ingesta, pricing, PDF, ofertas, publicación por PR, leak-check, schema, determinismo — ya construidos en la migración desde `renovarte-catalogo` | — (construidos antes de este spec-kit; sin `spec.md` propio todavía) | Done (en producción) |
+| RF-09 | `codCategoria` (`list[str]`, id(s) de grupo de alto nivel real(es) de Serlaca por producto) + JSON de mapeo a nombre de grupo, publicados en `products.json` | 0001 | Done — construido y verificado (AC-1 a AC-7 demostrados, ver `tasks.md`) |
